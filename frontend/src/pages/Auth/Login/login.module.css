@@ -1,0 +1,139 @@
+@reference "tailwindcss";
+
+.page {
+  @apply min-h-screen flex;
+}
+
+/* ── Brand panel (left) ── */
+.brandPanel {
+  @apply hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-emerald-800 to-emerald-950;
+}
+
+.brandBg {
+  @apply absolute inset-0 bg-cover bg-center opacity-30;
+}
+
+.brandContent {
+  @apply relative z-10 flex flex-col justify-between p-12 text-white;
+}
+
+.logo {
+  @apply flex items-center gap-3;
+}
+
+.logoIcon {
+  @apply w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-xl;
+}
+
+.logoText {
+  @apply text-xl font-bold;
+}
+
+.brandHeading {
+  @apply text-4xl font-bold italic mb-4;
+}
+
+.brandDesc {
+  @apply text-white/80 mb-8;
+}
+
+.featureList {
+  @apply space-y-4;
+}
+
+.featureItem {
+  @apply flex items-center gap-3;
+}
+
+.brandFooter {
+  @apply text-white/60 text-sm;
+}
+
+/* ── Form panel (right) ── */
+.formPanel {
+  @apply w-full lg:w-1/2 flex items-center justify-center p-8;
+}
+
+.formBox {
+  @apply w-full max-w-md;
+}
+
+.formTitle {
+  @apply text-3xl font-bold text-gray-900 mb-2;
+}
+
+.formSubtitle {
+  @apply text-gray-600 mb-8;
+}
+
+.errorBox {
+  @apply mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700;
+}
+
+.form {
+  @apply space-y-6;
+}
+
+.field {
+  @apply block text-sm font-medium text-gray-700 mb-2;
+}
+
+.inputWrap {
+  @apply relative;
+}
+
+.inputIcon {
+  @apply absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400;
+}
+
+.input {
+  @apply w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg
+         focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition;
+}
+
+.inputPassword {
+  @apply w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg
+         focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition;
+}
+
+.toggleBtn {
+  @apply absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600;
+}
+
+.row {
+  @apply flex items-center justify-between;
+}
+
+.checkboxLabel {
+  @apply flex items-center gap-2 cursor-pointer text-sm text-gray-600;
+}
+
+.forgotLink {
+  @apply text-sm text-emerald-600 hover:text-emerald-700 font-medium;
+}
+
+.submitBtn {
+  @apply w-full py-3 bg-emerald-600 text-white font-medium rounded-lg
+         hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-200 transition
+         disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.registerLink {
+  @apply mt-8 text-center text-gray-600;
+}
+
+.link {
+  @apply text-emerald-600 hover:text-emerald-700 font-medium;
+}
+
+.demoBox {
+  @apply mt-8 p-4 bg-gray-50 rounded-lg;
+}
+
+.demoTitle {
+  @apply text-sm font-medium text-gray-700 mb-2;
+}
+
+.demoRow {
+  @apply flex justify-between text-sm text-gray-600;
+}
