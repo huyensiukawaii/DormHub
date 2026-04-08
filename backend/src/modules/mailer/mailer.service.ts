@@ -56,13 +56,28 @@ export class MailerService {
   }
 
   private async loadTemplate(templateFileName: string): Promise<string> {
-    const absPath = path.join(__dirname, 'templates', templateFileName);
-    const cached = MailerService.templateCache.get(absPath);
-    if (cached) return cached;
+    const candidates = [
+      path.join(__dirname, 'templates', templateFileName),
+      path.join(process.cwd(), 'dist', 'src', 'modules', 'mailer', 'templates', templateFileName),
+      path.join(process.cwd(), 'dist', 'modules', 'mailer', 'templates', templateFileName),
+      path.join(process.cwd(), 'src', 'modules', 'mailer', 'templates', templateFileName),
+    ];
 
-    const content = await readFile(absPath, 'utf8');
-    MailerService.templateCache.set(absPath, content);
-    return content;
+    let lastErr: unknown;
+    for (const absPath of candidates) {
+      const cached = MailerService.templateCache.get(absPath);
+      if (cached) return cached;
+
+      try {
+        const content = await readFile(absPath, 'utf8');
+        MailerService.templateCache.set(absPath, content);
+        return content;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    throw lastErr;
   }
 
   private async renderHtmlTemplate(params: {

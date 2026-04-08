@@ -7,7 +7,25 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // CORS
-  app.enableCors();
+  const corsOriginRaw = process.env.CORS_ORIGIN ?? process.env.FRONTEND_URL;
+  const allowedOrigins = (corsOriginRaw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (allowedOrigins.length > 0) {
+    app.enableCors({
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        return allowedOrigins.includes(origin)
+          ? callback(null, true)
+          : callback(new Error('Not allowed by CORS'), false);
+      },
+      credentials: true,
+    });
+  } else {
+    app.enableCors();
+  }
 
   // Validation
   app.useGlobalPipes(

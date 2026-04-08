@@ -24,6 +24,10 @@ export class AuthService {
     return createHash('sha256').update(rawToken).digest('hex');
   }
 
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
   private getResetTokenTtlMinutes(): number {
     const raw = this.configService.get<string>('RESET_PASSWORD_TTL_MINUTES', '15');
     const ttl = Number(raw);
@@ -31,16 +35,32 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const normalizedEmail = this.normalizeEmail(dto.email);
+
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive',
+        },
+      },
       include: { student: true },
     });
 
-    if (!user || !user.isActive) {
+    let user = candidates.find((u) => u.isActive);
+    if (!user) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+    let isPasswordValid = false;
+    for (const candidate of candidates) {
+      if (!candidate.isActive) continue;
+      if (await bcrypt.compare(dto.password, candidate.passwordHash)) {
+        user = candidate;
+        isPasswordValid = true;
+        break;
+      }
+    }
     if (!isPasswordValid) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
@@ -65,9 +85,18 @@ export class AuthService {
       throw new BadRequestException('MSSV không hợp lệ');
     }
 
+    const normalizedEmail = this.normalizeEmail(dto.email);
+
     const [existingById, existingByEmail, existingByCode] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: userId } }),
-      this.prisma.user.findUnique({ where: { email: dto.email } }),
+      this.prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive',
+          },
+        },
+      }),
       this.prisma.student.findUnique({ where: { studentCode: dto.studentCode } }),
     ]);
 
@@ -83,7 +112,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         id: userId,
-        email: dto.email,
+        email: normalizedEmail,
         passwordHash,
         fullName: dto.fullName,
         phone: dto.phone,
@@ -141,10 +170,15 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = this.normalizeEmail(email);
 
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive',
+        },
+      },
     });
 
     // Tránh user-enumeration: luôn trả về OK.
