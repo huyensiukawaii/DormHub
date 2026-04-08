@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
 import { PrismaService } from '@/common/prisma/prisma.service';
-import { LoginDto, RegisterDto, ChangePasswordDto, AuthResponseDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, AuthResponseDto } from './dto/auth.dto';
 import { UserRole } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
@@ -93,7 +93,7 @@ export class AuthService {
             studentCode: dto.studentCode,
             fullName: dto.fullName,
             majorCode: dto.majorCode,
-            gender: 'MALE',
+            gender: dto.gender,
           },
         },
       },
@@ -112,30 +112,6 @@ export class AuthService {
         studentCode: dto.studentCode,
       },
     };
-  }
-
-  async changePassword(userId: number, dto: ChangePasswordDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-
-    const isPasswordValid = await bcrypt.compare(dto.oldPassword, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Mật khẩu cũ không đúng');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash },
-    });
-
-    return { message: 'Đổi mật khẩu thành công' };
   }
 
   async getProfile(userId: number) {

@@ -3,17 +3,21 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Building2, Mail, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { authApi } from '@/lib/auth';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const trimmedEmail = useMemo(() => email.trim(), [email]);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
 
     if (!trimmedEmail) {
       setError('Vui lòng nhập email.');
@@ -25,7 +29,18 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    setSubmitted(true);
+    setLoading(true);
+    try {
+      const res = await authApi.forgotPassword(trimmedEmail);
+      setSubmitted(true);
+      setSuccessMessage(
+        res?.message || 'Nếu email tồn tại trong hệ thống, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu.',
+      );
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Gửi yêu cầu thất bại. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,7 +74,8 @@ export default function ForgotPasswordPage() {
               <div>
                 <div className="text-sm font-semibold text-emerald-700">Đã ghi nhận yêu cầu</div>
                 <div className="text-sm text-emerald-700/80 mt-1">
-                  Nếu email tồn tại trong hệ thống, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu.
+                  {successMessage ||
+                    'Nếu email tồn tại trong hệ thống, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu.'}
                 </div>
               </div>
             </div>
@@ -77,6 +93,7 @@ export default function ForgotPasswordPage() {
                     onChange={(e) => {
                       setEmail(e.target.value);
                       setError('');
+                      setSuccessMessage('');
                     }}
                     placeholder="sv20210001@sis.hust.edu.vn"
                     className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
@@ -86,9 +103,10 @@ export default function ForgotPasswordPage() {
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all"
+                disabled={loading}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-semibold rounded-lg transition-all"
               >
-                Gửi yêu cầu
+                {loading ? 'Đang gửi...' : 'Gửi yêu cầu'}
               </button>
             </form>
           )}

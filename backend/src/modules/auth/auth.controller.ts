@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, ChangePasswordDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { User } from '@prisma/client';
@@ -29,14 +29,6 @@ export class AuthController {
   @ApiOperation({ summary: 'Lấy thông tin user hiện tại' })
   async getProfile(@CurrentUser() user: User) {
     return this.authService.getProfile(user.id);
-  }
-
-  @Post('change-password')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Đổi mật khẩu' })
-  async changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
-    return this.authService.changePassword(user.id, dto);
   }
 
   @Post('logout')

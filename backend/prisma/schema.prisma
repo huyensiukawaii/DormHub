@@ -131,6 +131,7 @@ model User {
   student              Student?
   reviewedApplications RegistrationApplication[] @relation("ReviewedBy")
   createdContracts     Contract[]                @relation("CreatedBy")
+  passwordResetTokens  PasswordResetToken[]
   recordedMeterReadings MeterReading[]
   approvedInvoices     Invoice[]                 @relation("ApprovedBy")
   handledTickets       MaintenanceTicket[]       @relation("HandledBy")
@@ -333,22 +334,6 @@ model Contract {
   applicationId Int?     @unique @map("application_id")
 
   startDate   DateTime @map("start_date") @db.Date
-
-// 15. PasswordResetToken - Token đặt lại mật khẩu
-model PasswordResetToken {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  tokenHash String   @unique @map("token_hash")
-  expiresAt DateTime @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("password_reset_tokens")
-}
   endDate     DateTime @map("end_date") @db.Date
   monthlyRent Decimal  @map("monthly_rent") @db.Decimal(12, 0)
 
@@ -373,6 +358,22 @@ model PasswordResetToken {
   @@index([bedId])
   @@index([status])
   @@map("contracts")
+}
+
+// 15. PasswordResetToken - Token đặt lại mật khẩu
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 // 10. MeterReading - Chỉ số công tơ điện/nước

@@ -101,6 +101,7 @@ export default function RegisterPage() {
         email: formData.email.trim(),
         phone: formData.phone,
         studentCode: formData.studentCode.trim(),
+        gender: formData.gender as 'MALE' | 'FEMALE',
         majorCode: formData.majorCode,
         password: formData.password,
       });
