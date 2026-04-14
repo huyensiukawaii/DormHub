@@ -67,21 +67,39 @@ export class RoomsService {
     const room = await this.prisma.room.findUnique({
       where: { id },
       include: {
-        building: true,
+        building: {
+          select: { id: true, code: true, name: true },
+        },
         contracts: {
           where: { status: 'ACTIVE' },
           include: {
             student: {
-              select: { 
-                id: true, 
-                studentCode: true, 
-                fullName: true, 
+              select: {
+                id: true,
+                studentCode: true,
+                fullName: true,
+                email: true,
                 phone: true,
-                gender: true,
+                majorCode: true,
+                className: true,
+                user: {
+                  select: { avatarUrl: true },
+                },
               },
             },
           },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { startDate: 'asc' },
+        },
+        tickets: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            priority: true,
+            status: true,
+            createdAt: true,
+          },
         },
       },
     });
@@ -91,16 +109,37 @@ export class RoomsService {
     }
 
     return {
-      ...room,
+      id: room.id,
+      code: room.code,
+      floor: room.floor,
+      roomType: room.roomType,
+      gender: room.gender,
+      capacity: room.capacity,
+      pricePerMonth: room.pricePerMonth,
+      status: room.status,
+      description: room.description,
+      building: room.building,
       occupiedCount: room.contracts.length,
       availableCount: room.capacity - room.contracts.length,
       residents: room.contracts.map((c) => ({
+        id: c.id,
         contractId: c.id,
-        contractCode: c.code,
         isRoomLeader: c.isRoomLeader,
-        checkedInAt: c.checkedInAt,
-        student: c.student,
+        checkInDate: c.startDate,
+        checkOutDate: c.endDate,
+        contractStatus: c.status,
+        student: {
+          id: c.student.id,
+          studentCode: c.student.studentCode,
+          fullName: c.student.fullName,
+          email: c.student.email,
+          phone: c.student.phone,
+          major: c.student.majorCode,
+          classCode: c.student.className,
+          avatar: c.student.user?.avatarUrl ?? null,
+        },
       })),
+      recentTickets: room.tickets,
     };
   }
 
