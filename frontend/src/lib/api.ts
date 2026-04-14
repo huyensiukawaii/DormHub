@@ -18,11 +18,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Xử lý lỗi 401 (token hết hạn)
+// Xử lý lỗi 401 (token hết hạn) — bỏ qua các auth endpoint vì 401 ở đó là expected
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+    const url: string = error.config?.url ?? '';
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+    if (error.response?.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
       window.location.href = '/login';

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2, AlertCircle, CheckCircle2, Lock, Eye, EyeOff, KeyRound, ArrowLeft, Loader2 } from 'lucide-react';
 import { authApi } from '@/lib/auth';
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

@@ -9,5 +9,8 @@ coverage/
 
 /generated/prisma
 
+# Local scripts
+hash-password.ts
+
 # Logs
 *.log
