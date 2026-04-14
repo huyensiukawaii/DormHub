@@ -42,12 +42,6 @@ enum RoomStatus {
   CLOSED
 }
 
-enum BedStatus {
-  AVAILABLE
-  OCCUPIED
-  MAINTENANCE
-}
-
 enum PeriodType {
   NEW_REGISTRATION
   RENEWAL
@@ -165,7 +159,7 @@ model Room {
   floor         Int
   gender        Gender
   roomType      RoomType   @map("room_type")
-  capacity      Int // Số giường
+  capacity      Int // Sức chứa (số người)
   pricePerMonth Decimal    @map("price_per_month") @db.Decimal(12, 0)
   description   String?
   status        RoomStatus @default(ACTIVE)
@@ -173,7 +167,6 @@ model Room {
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
   building      Building            @relation(fields: [buildingId], references: [id])
-  beds          Bed[]
   roomChoices   RoomChoice[]
   contracts     Contract[]
   meterReadings MeterReading[]
@@ -187,24 +180,6 @@ model Room {
   @@index([buildingId])
   @@index([status])
   @@map("rooms")
-}
-
-// 4. Bed - Giường
-model Bed {
-  id        Int       @id @default(autoincrement())
-  code      String    @unique // A101-01, A101-02
-  roomId    Int       @map("room_id")
-  position  String? // Giường tầng trên/dưới, gần cửa sổ
-  status    BedStatus @default(AVAILABLE)
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  room      Room       @relation(fields: [roomId], references: [id])
-  contracts Contract[]
-
-  @@index([roomId])
-  @@index([status])
-  @@map("beds")
 }
 
 // 5. Student - Sinh viên
@@ -330,7 +305,6 @@ model Contract {
   code          String @unique // HD-2025-001
   studentId     Int    @map("student_id")
   roomId        Int    @map("room_id")
-  bedId         Int?   @map("bed_id") // Chọn khi check-in
   applicationId Int?   @unique @map("application_id")
 
   startDate   DateTime @map("start_date") @db.Date
@@ -349,13 +323,11 @@ model Contract {
 
   student     Student                  @relation(fields: [studentId], references: [id])
   room        Room                     @relation(fields: [roomId], references: [id])
-  bed         Bed?                     @relation(fields: [bedId], references: [id])
   application RegistrationApplication? @relation(fields: [applicationId], references: [id])
   createdBy   User?                    @relation("CreatedBy", fields: [createdById], references: [id])
 
   @@index([studentId])
   @@index([roomId])
-  @@index([bedId])
   @@index([status])
   @@map("contracts")
 }
