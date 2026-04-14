@@ -43,7 +43,7 @@ interface Room {
   gender: 'MALE' | 'FEMALE';
   capacity: number;
   pricePerMonth: number;
-  status: 'ACTIVE' | 'MAINTENANCE' | 'INACTIVE';
+  status: 'ACTIVE' | 'MAINTENANCE' | 'CLOSED';
   occupiedCount: number;
   availableCount: number;
 }
@@ -395,7 +395,7 @@ export default function BuildingDetailPage() {
             <option value="">Tất cả trạng thái</option>
             <option value="ACTIVE">Hoạt động</option>
             <option value="MAINTENANCE">Bảo trì</option>
-            <option value="INACTIVE">Ngừng HĐ</option>
+            <option value="CLOSED">Ngừng HĐ</option>
           </select>
         </div>
       </div>
@@ -569,7 +569,7 @@ export default function BuildingDetailPage() {
                   >
                     <option value="ACTIVE">Hoạt động</option>
                     <option value="MAINTENANCE">Bảo trì</option>
-                    <option value="INACTIVE">Ngừng HĐ</option>
+                    <option value="CLOSED">Ngừng HĐ</option>
                   </select>
                 </div>
               )}

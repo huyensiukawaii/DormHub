@@ -1,6 +1,6 @@
-import { IsString, IsEnum, IsInt, IsOptional, Min, IsNumber } from 'class-validator';
+import { IsString, IsEnum, IsInt, IsOptional, Min, IsNumber, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { RoomType, RoomStatus, Gender } from '@prisma/client';
 
 export class CreateRoomDto {
@@ -87,6 +87,7 @@ export class RoomQueryDto {
 
   @ApiPropertyOptional({ description: 'Chỉ lấy phòng còn chỗ trống' })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
   hasAvailable?: boolean;
 }

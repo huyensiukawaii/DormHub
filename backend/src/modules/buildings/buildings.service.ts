@@ -60,8 +60,8 @@ export class BuildingsService {
         stats: {
           totalRooms: building._count.rooms,
           totalCapacity,
-          occupiedSlots,
-          availableSlots: totalCapacity - occupiedSlots,
+          occupiedCount: occupiedSlots,
+          availableCount: totalCapacity - occupiedSlots,
           occupancyRate: totalCapacity > 0 ? Math.round((occupiedSlots / totalCapacity) * 100) : 0,
         },
       };
@@ -97,13 +97,38 @@ export class BuildingsService {
       0,
     );
 
+    const rooms = building.rooms.map((room) => ({
+      id: room.id,
+      code: room.code,
+      buildingId: room.buildingId,
+      floor: room.floor,
+      roomType: room.roomType,
+      gender: room.gender,
+      capacity: room.capacity,
+      pricePerMonth: room.pricePerMonth,
+      description: room.description,
+      status: room.status,
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+      occupiedCount: room._count.contracts,
+      availableCount: room.capacity - room._count.contracts,
+    }));
+
     return {
-      ...building,
+      id: building.id,
+      code: building.code,
+      name: building.name,
+      totalFloors: building.totalFloors,
+      description: building.description,
+      status: building.status,
+      createdAt: building.createdAt,
+      updatedAt: building.updatedAt,
+      rooms,
       stats: {
-        totalRooms: building.rooms.length,
+        totalRooms: rooms.length,
         totalCapacity,
-        occupiedSlots,
-        availableSlots: totalCapacity - occupiedSlots,
+        occupiedCount: occupiedSlots,
+        availableCount: totalCapacity - occupiedSlots,
         occupancyRate: totalCapacity > 0 ? Math.round((occupiedSlots / totalCapacity) * 100) : 0,
       },
     };
