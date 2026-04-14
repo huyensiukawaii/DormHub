@@ -47,23 +47,21 @@ export class AuthService {
       include: { student: true },
     });
 
-    let user = candidates.find((u) => u.isActive);
-    if (!user) {
+    // Tách riêng: tài khoản bị khóa vs email không tồn tại
+    const activeUser = candidates.find((u) => u.isActive);
+    if (!activeUser) {
+      if (candidates.length > 0) {
+        throw new UnauthorizedException('Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.');
+      }
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
-    let isPasswordValid = false;
-    for (const candidate of candidates) {
-      if (!candidate.isActive) continue;
-      if (await bcrypt.compare(dto.password, candidate.passwordHash)) {
-        user = candidate;
-        isPasswordValid = true;
-        break;
-      }
-    }
+    const isPasswordValid = await bcrypt.compare(dto.password, activeUser.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
+
+    const user = activeUser;
 
     const payload = { sub: user.id, email: user.email, role: user.role };
 
@@ -80,28 +78,23 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
-    const userId = parseInt(dto.studentCode, 10);
-    if (isNaN(userId)) {
-      throw new BadRequestException('MSSV không hợp lệ');
-    }
-
     const normalizedEmail = this.normalizeEmail(dto.email);
 
-    const [existingById, existingByEmail, existingByCode] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: userId } }),
+    const [existingByEmail, existingByCode] = await Promise.all([
       this.prisma.user.findFirst({
-        where: {
-          email: {
-            equals: normalizedEmail,
-            mode: 'insensitive',
-          },
-        },
+        where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
       }),
-      this.prisma.student.findUnique({ where: { studentCode: dto.studentCode } }),
+      this.prisma.student.findUnique({
+        where: { studentCode: dto.studentCode },
+        include: { user: { select: { isActive: true } } },
+      }),
     ]);
 
-    if (existingById || existingByCode) {
-      throw new ConflictException('MSSV đã được sử dụng');
+    if (existingByCode) {
+      // Sinh viên đã có trong hệ thống (do admin tạo/import) → hướng dẫn đăng nhập
+      throw new ConflictException(
+        'Tài khoản của bạn đã được tạo sẵn trong hệ thống. Vui lòng đăng nhập bằng email và mật khẩu mặc định là MSSV của bạn.',
+      );
     }
     if (existingByEmail) {
       throw new ConflictException('Email đã được sử dụng');
@@ -109,9 +102,9 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
+    // Dùng auto-increment cho user.id, KHÔNG đặt id = MSSV để tránh conflict với sequence
     const user = await this.prisma.user.create({
       data: {
-        id: userId,
         email: normalizedEmail,
         passwordHash,
         fullName: dto.fullName,
