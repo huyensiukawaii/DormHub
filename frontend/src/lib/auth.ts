@@ -6,6 +6,7 @@ export interface User {
   fullName: string;
   role: 'ADMIN' | 'STAFF' | 'STUDENT';
   studentCode?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface LoginData {
@@ -53,6 +54,7 @@ export const authApi = {
     const response = await api.post('/auth/reset-password', { token, newPassword });
     return response.data;
   },
+
 };
 
 // Lưu auth data vào localStorage

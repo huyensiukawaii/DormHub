@@ -76,5 +76,6 @@ export class AuthResponseDto {
     fullName: string;
     role: UserRole;
     studentCode: string;
+    mustChangePassword: boolean;
   };
 }

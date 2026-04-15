@@ -96,6 +96,7 @@ export default function StudentsPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
 
+
   // Delete modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -110,25 +111,28 @@ export default function StudentsPage() {
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 10 }, (_, i) => currentYear - i);
 
-  useEffect(() => {
-    fetchStudents();
-  }, [page, filterMajor, filterYear, filterStatus, filterHasRoom]);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      setDebouncedSearch(search);
       setPage(1);
-      fetchStudents();
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    fetchStudents();
+  }, [page, debouncedSearch, filterMajor, filterYear, filterStatus, filterHasRoom]);
+
   const fetchStudents = async () => {
     try {
       setLoading(true);
+      setError('');
       const params = new URLSearchParams();
       params.append('page', page.toString());
       params.append('limit', limit.toString());
-      if (search) params.append('search', search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (filterMajor) params.append('major', filterMajor);
       if (filterYear) params.append('admissionYear', filterYear);
       if (filterStatus) params.append('status', filterStatus);
@@ -195,11 +199,14 @@ export default function StudentsPage() {
     try {
       if (modalMode === 'create') {
         await api.post('/students', formData);
+        setShowModal(false);
+        fetchStudents();
       } else {
-        await api.put(`/students/${selectedStudent?.id}`, formData);
+        if (!selectedStudent) return;
+        await api.put(`/students/${selectedStudent.id}`, formData);
+        setShowModal(false);
+        fetchStudents();
       }
-      setShowModal(false);
-      fetchStudents();
     } catch (err: any) {
       setFormError(err.response?.data?.message || 'Có lỗi xảy ra');
     } finally {
@@ -232,9 +239,7 @@ export default function StudentsPage() {
       const formData = new FormData();
       formData.append('file', importFile);
 
-      const response = await api.post('/students/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await api.post('/students/import', formData);
 
       setImportResult(response.data);
       if (response.data.success > 0) {
@@ -792,14 +797,14 @@ export default function StudentsPage() {
                     ) : (
                       <>
                         <p className="text-sm font-medium text-slate-700 mb-1">Kéo thả hoặc click để chọn file</p>
-                        <p className="text-xs text-slate-500">Hỗ trợ file .csv, .xlsx</p>
+                        <p className="text-xs text-slate-500">Hỗ trợ file .csv</p>
                       </>
                     )}
                   </div>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.xlsx"
+                    accept=".csv"
                     className="hidden"
                     onChange={(e) => setImportFile(e.target.files?.[0] || null)}
                   />

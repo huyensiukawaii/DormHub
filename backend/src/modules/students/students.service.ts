@@ -334,11 +334,18 @@ export class StudentsService {
       throw new ConflictException('Email đã được sử dụng');
     }
 
+    // Validate admissionYear matches studentCode prefix
+    const codeYear = parseInt(dto.studentCode.substring(0, 4));
+    if (codeYear && dto.admissionYear && codeYear !== dto.admissionYear) {
+      throw new BadRequestException(
+        `Năm nhập học (${dto.admissionYear}) không khớp với MSSV (${dto.studentCode})`,
+      );
+    }
+
     // Create user and student in transaction
+    // Default password = MSSV; student should change on first login
     const result = await this.prisma.$transaction(async (tx) => {
-      // Create user with default password
-      const defaultPassword = dto.studentCode; // MSSV as default password
-      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+      const passwordHash = await bcrypt.hash(dto.studentCode, 10);
 
       const user = await tx.user.create({
         data: {
@@ -348,6 +355,7 @@ export class StudentsService {
           fullName: dto.fullName,
           phone: dto.phone,
           isActive: true,
+          mustChangePassword: true,
         },
       });
 
@@ -611,7 +619,15 @@ export class StudentsService {
         student.faculty || '',
         student.className || '',
         admYear ? `K${admYear - 1955}` : '',
-        student.user?.isActive ? 'Đang học' : 'Tạm nghỉ',
+        (() => {
+          switch (student.status) {
+            case 'ACTIVE': return 'Đang học';
+            case 'GRADUATED': return 'Đã tốt nghiệp';
+            case 'SUSPENDED': return 'Tạm nghỉ';
+            case 'DROPPED_OUT': return 'Thôi học';
+            default: return '';
+          }
+        })(),
         activeContract?.room.code || '',
         activeContract?.room.building.name || '',
       ];

@@ -73,6 +73,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         studentCode: user.student?.studentCode ?? '',
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }
@@ -132,6 +133,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         studentCode: dto.studentCode,
+        mustChangePassword: false, // tự đăng ký = tự chọn mật khẩu, không cần nhắc
       },
     };
   }
@@ -233,7 +235,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
-        data: { passwordHash },
+        data: { passwordHash, mustChangePassword: false },
       }),
       this.prisma.passwordResetToken.update({
         where: { tokenHash },

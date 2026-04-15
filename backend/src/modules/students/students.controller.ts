@@ -73,6 +73,18 @@ export class StudentsController {
   }
 
   // ========================================
+  // GET BY STUDENT CODE (must be before :id to avoid shadowing)
+  // ========================================
+  @Get('code/:studentCode')
+  @Roles('ADMIN', 'STAFF')
+  @ApiOperation({ summary: 'Tìm sinh viên theo MSSV' })
+  @ApiResponse({ status: 200, description: 'Thông tin sinh viên' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy sinh viên' })
+  async findByStudentCode(@Param('studentCode') studentCode: string) {
+    return this.studentsService.findByStudentCode(studentCode);
+  }
+
+  // ========================================
   // GET ONE STUDENT BY ID
   // ========================================
   @Get(':id')
@@ -123,15 +135,11 @@ export class StudentsController {
       throw new BadRequestException('Vui lòng chọn file');
     }
 
-    // Check file type
-    const allowedMimeTypes = [
-      'text/csv',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ];
+    // Check file type - only CSV supported
+    const allowedMimeTypes = ['text/csv', 'application/csv', 'text/plain'];
 
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Chỉ hỗ trợ file CSV hoặc Excel');
+    if (!allowedMimeTypes.includes(file.mimetype) && !file.originalname.endsWith('.csv')) {
+      throw new BadRequestException('Chỉ hỗ trợ file CSV');
     }
 
     try {
@@ -192,15 +200,4 @@ export class StudentsController {
     return this.studentsService.remove(id);
   }
 
-  // ========================================
-  // GET BY STUDENT CODE
-  // ========================================
-  @Get('code/:studentCode')
-  @Roles('ADMIN', 'STAFF')
-  @ApiOperation({ summary: 'Tìm sinh viên theo MSSV' })
-  @ApiResponse({ status: 200, description: 'Thông tin sinh viên' })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy sinh viên' })
-  async findByStudentCode(@Param('studentCode') studentCode: string) {
-    return this.studentsService.findByStudentCode(studentCode);
-  }
 }

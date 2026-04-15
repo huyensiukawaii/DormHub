@@ -135,6 +135,7 @@ export default function StudentDetailPage() {
   const fetchStudent = async () => {
     try {
       setLoading(true);
+      setError('');
       const response = await api.get(`/students/${studentId}`);
       setStudent(response.data);
     } catch (err: any) {
