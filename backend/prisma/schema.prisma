@@ -71,6 +71,13 @@ enum ContractStatus {
   EXPIRED
 }
 
+enum StudentStatus {
+  ACTIVE
+  GRADUATED
+  SUSPENDED
+  DROPPED_OUT
+}
+
 enum MeterType {
   ELECTRICITY
   WATER
@@ -118,7 +125,8 @@ model User {
   fullName     String   @map("full_name")
   phone        String?
   avatarUrl    String?  @map("avatar_url")
-  isActive     Boolean  @default(true) @map("is_active")
+  isActive            Boolean  @default(true) @map("is_active")
+  mustChangePassword  Boolean  @default(false) @map("must_change_password")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -196,8 +204,9 @@ model Student {
   majorCode        String?   @map("major_code") // Mã ngành học
   faculty          String? // Khoa
   className        String?   @map("class_name") // Lớp
-  hometownProvince String?   @map("hometown_province") // Tỉnh quê quán
-  hometownDistance Int?      @map("hometown_distance") // Khoảng cách (km)
+  hometownProvince String?       @map("hometown_province") // Tỉnh quê quán
+  hometownDistance Int?          @map("hometown_distance") // Khoảng cách (km)
+  status           StudentStatus @default(ACTIVE)
 
   emergencyContactName     String? @map("emergency_contact_name")
   emergencyContactPhone    String? @map("emergency_contact_phone")
