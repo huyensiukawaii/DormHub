@@ -325,9 +325,11 @@ export class StudentsService {
       throw new ConflictException('Mã sinh viên đã tồn tại');
     }
 
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
     // Check duplicate email in User
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const existingUser = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
     });
 
     if (existingUser) {
@@ -349,7 +351,7 @@ export class StudentsService {
 
       const user = await tx.user.create({
         data: {
-          email: dto.email,
+          email: normalizedEmail,
           passwordHash,
           role: 'STUDENT',
           fullName: dto.fullName,
@@ -369,7 +371,7 @@ export class StudentsService {
           dateOfBirth: new Date(dto.dateOfBirth),
           idCardNumber: dto.idCardNumber,
           phone: dto.phone,
-          email: dto.email,
+          email: normalizedEmail,
           faculty: dto.major,
           className: dto.classCode,
           hometownProvince: dto.hometown,
@@ -410,10 +412,11 @@ export class StudentsService {
     }
 
     // Check duplicate email if changing
-    if (dto.email && dto.email !== student.email) {
+    const normalizedEmail = dto.email ? dto.email.trim().toLowerCase() : undefined;
+    if (normalizedEmail && normalizedEmail !== student.email?.toLowerCase()) {
       const existingUser = await this.prisma.user.findFirst({
         where: {
-          email: dto.email,
+          email: { equals: normalizedEmail, mode: 'insensitive' },
           id: { not: student.userId },
         },
       });
@@ -427,7 +430,7 @@ export class StudentsService {
       // Sync email/phone/name changes to User
       const userData: any = {};
       if (dto.fullName) userData.fullName = dto.fullName;
-      if (dto.email) userData.email = dto.email;
+      if (normalizedEmail) userData.email = normalizedEmail;
       if (dto.phone) userData.phone = dto.phone;
 
       if (Object.keys(userData).length > 0) {
@@ -447,7 +450,7 @@ export class StudentsService {
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
           idCardNumber: dto.idCardNumber,
           phone: dto.phone,
-          email: dto.email,
+          email: normalizedEmail,
           faculty: dto.major,
           className: dto.classCode,
           hometownProvince: dto.hometown,
@@ -530,15 +533,17 @@ export class StudentsService {
           continue;
         }
 
-        // Parse admission year
-        const admissionYear =
-          typeof row.admissionYear === 'string'
-            ? parseInt(row.admissionYear)
-            : row.admissionYear;
+        // Parse admission year — fallback to prefix of studentCode to avoid validate error
+        const studentCode = row.studentCode.toString().trim();
+        const codeYearPrefix = parseInt(studentCode.substring(0, 4));
+        const parsedYear = typeof row.admissionYear === 'string'
+          ? parseInt(row.admissionYear)
+          : row.admissionYear;
+        const admissionYear = parsedYear || codeYearPrefix || new Date().getFullYear();
 
         // Create student
         await this.create({
-          studentCode: row.studentCode.toString().trim(),
+          studentCode,
           fullName: row.fullName.trim(),
           email: row.email.trim(),
           phone: row.phone?.toString().trim() || '',
@@ -546,7 +551,7 @@ export class StudentsService {
           dateOfBirth: row.dateOfBirth,
           major: row.major?.trim() || '',
           classCode: row.classCode?.trim() || '',
-          admissionYear: admissionYear || new Date().getFullYear(),
+          admissionYear,
         });
 
         result.success++;
@@ -568,6 +573,7 @@ export class StudentsService {
   // ========================================
   async export(): Promise<string> {
     const students = await this.prisma.student.findMany({
+      where: { user: { isActive: true } },
       include: {
         user: {
           select: {
@@ -589,7 +595,7 @@ export class StudentsService {
       orderBy: { studentCode: 'asc' },
     });
 
-    // CSV header
+    // CSV header — dùng 'Năm nhập học' (số năm 4 chữ số) để có thể import lại được
     const headers = [
       'MSSV',
       'Họ tên',
@@ -599,7 +605,7 @@ export class StudentsService {
       'Ngày sinh',
       'Ngành',
       'Lớp',
-      'Khóa',
+      'Năm nhập học',
       'Trạng thái',
       'Phòng KTX',
       'Tòa',
@@ -618,7 +624,7 @@ export class StudentsService {
         student.dateOfBirth?.toISOString().split('T')[0] || '',
         student.faculty || '',
         student.className || '',
-        admYear ? `K${admYear - 1955}` : '',
+        admYear || '',
         (() => {
           switch (student.status) {
             case 'ACTIVE': return 'Đang học';
@@ -633,12 +639,16 @@ export class StudentsService {
       ];
     });
 
-    // Build CSV string
+    // Build CSV string (sanitize cells to prevent formula injection)
+    const sanitize = (value: string | number) => {
+      const str = value?.toString() || '';
+      // Prefix với tab nếu cell bắt đầu bằng ký tự dễ bị Excel hiểu là formula
+      const safe = /^[=+\-@|]/.test(str) ? `\t${str}` : str;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const csvContent = [
       headers.join(','),
-      ...rows.map((row) =>
-        row.map((cell) => `"${cell?.toString().replace(/"/g, '""') || ''}"`).join(','),
-      ),
+      ...rows.map((row) => row.map(sanitize).join(',')),
     ].join('\n');
 
     // Add BOM for UTF-8

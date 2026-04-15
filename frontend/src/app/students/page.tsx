@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MAJORS } from '@/lib/constants';
+import { getStoredUser } from '@/lib/auth';
 
 interface Student {
   id: number;
@@ -59,6 +60,8 @@ type StudentFormData = {
 export default function StudentsPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentUser = getStoredUser();
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -507,13 +510,15 @@ export default function StudentsPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => openDeleteModal(student)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Xóa"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => openDeleteModal(student)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Xóa"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

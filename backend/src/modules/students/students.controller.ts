@@ -138,7 +138,7 @@ export class StudentsController {
     // Check file type - only CSV supported
     const allowedMimeTypes = ['text/csv', 'application/csv', 'text/plain'];
 
-    if (!allowedMimeTypes.includes(file.mimetype) && !file.originalname.endsWith('.csv')) {
+    if (!allowedMimeTypes.includes(file.mimetype) && !file.originalname.toLowerCase().endsWith('.csv')) {
       throw new BadRequestException('Chỉ hỗ trợ file CSV');
     }
 

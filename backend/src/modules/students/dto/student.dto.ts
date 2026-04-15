@@ -169,7 +169,9 @@ export class QueryStudentDto {
 
   @ApiPropertyOptional({ description: 'Lọc theo có đang ở KTX không' })
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === '' ? undefined : value === 'true',
+  )
   @IsBoolean()
   hasRoom?: boolean;
 
