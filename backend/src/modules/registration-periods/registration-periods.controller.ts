@@ -56,10 +56,7 @@ export class RegistrationPeriodsController {
   @ApiResponse({ status: 200, description: 'Đợt đăng ký đang mở' })
   async findActive() {
     const period = await this.service.findActivePeriod();
-    if (!period) {
-      return { message: 'Hiện không có đợt đăng ký nào đang mở', data: null };
-    }
-    return period;
+    return { data: period };
   }
 
   // ========================================

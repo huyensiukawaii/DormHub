@@ -4,7 +4,7 @@ import { RegistrationPeriodsController } from './registration-periods.controller
 import { RegistrationPeriodsService } from './registration-periods.service';
 
 @Module({
-  imports: [ScheduleModule.forRoot()],
+  imports: [ScheduleModule],
   controllers: [RegistrationPeriodsController],
   providers: [RegistrationPeriodsService],
   exports: [RegistrationPeriodsService],

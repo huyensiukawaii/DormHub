@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   Search,
@@ -14,15 +14,12 @@ import {
   Loader2,
   ChevronRight,
   Clock,
-  Users,
-  CheckCircle,
   XCircle,
   Pause,
   Play,
   Eye,
   MoreHorizontal,
   CalendarDays,
-  CalendarCheck,
   FileText,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -64,6 +61,7 @@ const STATUS_CONFIG: Record<PeriodStatus, { label: string; color: string; bg: st
 
 export default function RegistrationPeriodsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [periods, setPeriods] = useState<RegistrationPeriod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +96,13 @@ export default function RegistrationPeriodsPage() {
 
   // Action menu
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+
+  const handleMenuToggle = (e: React.MouseEvent<HTMLButtonElement>, periodId: number) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenuPosition({ x: rect.right, y: rect.bottom });
+    setOpenMenuId(openMenuId === periodId ? null : periodId);
+  };
 
   // Form data
   const [formData, setFormData] = useState({
@@ -138,6 +143,18 @@ export default function RegistrationPeriodsPage() {
     fetchPeriods();
   }, [page, filterYear, filterStatus]);
 
+  // Handle ?edit=id from detail page "Chỉnh sửa" button
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId) return;
+    api.get(`/registration-periods/${editId}`)
+      .then((res) => {
+        openEditModal(res.data);
+        router.replace('/registration-periods');
+      })
+      .catch(() => {});
+  }, [searchParams]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1);
@@ -149,6 +166,7 @@ export default function RegistrationPeriodsPage() {
   const fetchPeriods = async () => {
     try {
       setLoading(true);
+      setError('');
       const params = new URLSearchParams();
       params.append('page', page.toString());
       params.append('limit', limit.toString());
@@ -244,7 +262,11 @@ export default function RegistrationPeriodsPage() {
       if (modalMode === 'create') {
         await api.post('/registration-periods', payload);
       } else {
-        await api.put(`/registration-periods/${selectedPeriod?.id}`, payload);
+        if (!selectedPeriod) {
+          setFormError('Không tìm thấy đợt đăng ký để cập nhật');
+          return;
+        }
+        await api.put(`/registration-periods/${selectedPeriod.id}`, payload);
       }
       setShowModal(false);
       fetchPeriods();
@@ -292,16 +314,6 @@ export default function RegistrationPeriodsPage() {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
-    });
-  };
-
-  const formatDateTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     });
   };
 
@@ -456,7 +468,7 @@ export default function RegistrationPeriodsPage() {
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-center relative">
                           <button
-                            onClick={() => setOpenMenuId(openMenuId === period.id ? null : period.id)}
+                            onClick={(e) => handleMenuToggle(e, period.id)}
                             className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                           >
                             <MoreHorizontal className="w-5 h-5" />
@@ -465,7 +477,10 @@ export default function RegistrationPeriodsPage() {
                           {openMenuId === period.id && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
+                              <div
+                                className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1"
+                                style={{ top: menuPosition.y + 4, right: window.innerWidth - menuPosition.x }}
+                              >
                                 <button
                                   onClick={() => { router.push(`/registration-periods/${period.id}`); setOpenMenuId(null); }}
                                   className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
@@ -597,12 +612,18 @@ export default function RegistrationPeriodsPage() {
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as PeriodStatus })}
-                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white"
+                    disabled={formData.status === 'CLOSED' || formData.status === 'CANCELLED'}
+                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
                     <option value="DRAFT">Nháp</option>
                     <option value="UPCOMING">Sắp mở</option>
                     <option value="OPEN">Đang mở</option>
+                    <option value="CLOSED">Đã đóng</option>
+                    <option value="CANCELLED">Đã hủy</option>
                   </select>
+                  {(formData.status === 'CLOSED' || formData.status === 'CANCELLED') && (
+                    <p className="mt-1 text-xs text-slate-500">Trạng thái này chỉ thay đổi qua luồng chuyển trạng thái.</p>
+                  )}
                 </div>
               </div>
 

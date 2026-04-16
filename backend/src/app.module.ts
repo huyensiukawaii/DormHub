@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BuildingsModule } from './modules/buildings/buildings.module';
@@ -15,6 +16,7 @@ import { RegistrationPeriodsModule } from './modules/registration-periods/regist
     StudentsModule,
     RoomsModule,
     BuildingsModule,
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     RegistrationPeriodsModule,

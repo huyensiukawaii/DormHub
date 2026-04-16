@@ -7,9 +7,7 @@ import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   ArrowLeft,
   Pencil,
-  Calendar,
   Clock,
-  Users,
   CheckCircle,
   XCircle,
   AlertCircle,
@@ -23,7 +21,6 @@ import {
   Play,
   Pause,
   Settings,
-  ChevronRight,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -393,7 +390,7 @@ export default function RegistrationPeriodDetailPage() {
               {/* Gender distribution */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                 <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-emerald-600" />
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
                   Phân bổ theo giới tính
                 </h3>
                 <div className="flex items-center gap-8">

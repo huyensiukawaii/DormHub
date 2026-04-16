@@ -91,11 +91,6 @@ export class RegistrationPeriodsService {
               fullName: true,
             },
           },
-          _count: {
-            select: {
-              applications: true,
-            },
-          },
         },
       }),
       this.prisma.registrationPeriod.count({ where }),
@@ -281,9 +276,34 @@ export class RegistrationPeriodsService {
     // Validate dates if changing
     const startDate = dto.startDate ? new Date(dto.startDate) : period.startDate;
     const endDate = dto.endDate ? new Date(dto.endDate) : period.endDate;
+    const periodAny = period as any;
+    const academicYear = dto.academicYear ?? periodAny.academicYear;
+    const semester = dto.semester ?? periodAny.semester;
+    const newStatus = dto.status ?? period.status;
 
     if (endDate <= startDate) {
       throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu');
+    }
+
+    // Check overlapping periods (same as create, excluding self)
+    if (
+      newStatus !== RegistrationPeriodStatus.DRAFT &&
+      newStatus !== RegistrationPeriodStatus.CANCELLED
+    ) {
+      const overlapping = await this.prisma.registrationPeriod.findFirst({
+        where: {
+          id: { not: id },
+          academicYear,
+          semester,
+          status: { notIn: [RegistrationPeriodStatus.CANCELLED, RegistrationPeriodStatus.DRAFT] as any[] },
+          OR: [{ startDate: { lte: endDate }, endDate: { gte: startDate } }],
+        } as any,
+      });
+      if (overlapping) {
+        throw new ConflictException(
+          `Đã có đợt đăng ký "${overlapping.name}" trong khoảng thời gian này`,
+        );
+      }
     }
 
     const updated = await this.prisma.registrationPeriod.update({
@@ -296,8 +316,8 @@ export class RegistrationPeriodsService {
         description: dto.description,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        moveInDate: dto.moveInDate ? new Date(dto.moveInDate) : undefined,
-        moveOutDate: dto.moveOutDate ? new Date(dto.moveOutDate) : undefined,
+        moveInDate: dto.moveInDate !== undefined ? (dto.moveInDate ? new Date(dto.moveInDate) : null) : undefined,
+        moveOutDate: dto.moveOutDate !== undefined ? (dto.moveOutDate ? new Date(dto.moveOutDate) : null) : undefined,
         maxApplicationsPerStudent: dto.maxApplicationsPerStudent,
         allowRoomPreference: dto.allowRoomPreference,
         autoAssignRoom: dto.autoAssignRoom,
@@ -390,14 +410,16 @@ export class RegistrationPeriodsService {
       );
     }
 
-    if (period.totalApplications > 0) {
-      throw new BadRequestException(
-        'Không thể xóa đợt đăng ký đã có đơn đăng ký',
-      );
-    }
-
-    await this.prisma.registrationPeriod.delete({
-      where: { id },
+    await this.prisma.$transaction(async (tx) => {
+      const appCount = await tx.registrationApplication.count({
+        where: { periodId: id },
+      });
+      if (appCount > 0) {
+        throw new BadRequestException(
+          'Không thể xóa đợt đăng ký đã có đơn đăng ký',
+        );
+      }
+      await tx.registrationPeriod.delete({ where: { id } });
     });
 
     return { message: 'Đã xóa đợt đăng ký thành công' };
@@ -436,18 +458,15 @@ export class RegistrationPeriodsService {
         },
       }),
       // Daily trend (last 14 days)
-      this.prisma.registrationApplication.groupBy({
-        by: ['createdAt'],
+      this.prisma.registrationApplication.findMany({
         where: {
           periodId: id,
           createdAt: {
             gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
           },
         },
-        _count: true,
-        orderBy: {
-          createdAt: 'asc',
-        },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'asc' },
       }),
     ]);
 
@@ -474,11 +493,13 @@ export class RegistrationPeriodsService {
     const dailyMap: Record<string, number> = {};
     dailyApps.forEach((d) => {
       const dateStr = d.createdAt.toISOString().split('T')[0];
-      dailyMap[dateStr] = (dailyMap[dateStr] || 0) + d._count;
+      dailyMap[dateStr] = (dailyMap[dateStr] || 0) + 1;
     });
 
+    const liveTotal = Object.values(statusMap).reduce((sum, n) => sum + n, 0);
+
     return {
-      totalApplications: period.totalApplications,
+      totalApplications: liveTotal,
       approvedCount: statusMap['APPROVED'] || 0,
       rejectedCount: statusMap['REJECTED'] || 0,
       pendingCount: statusMap['PENDING'] || 0,
