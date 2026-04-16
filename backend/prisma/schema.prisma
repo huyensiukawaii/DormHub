@@ -42,15 +42,12 @@ enum RoomStatus {
   CLOSED
 }
 
-enum PeriodType {
-  NEW_REGISTRATION
-  RENEWAL
-}
-
 enum PeriodStatus {
+  DRAFT
   UPCOMING
   OPEN
   CLOSED
+  CANCELLED
 }
 
 enum ApplicationType {
@@ -130,9 +127,10 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  student               Student?
-  reviewedApplications  RegistrationApplication[] @relation("ReviewedBy")
-  createdContracts      Contract[]                @relation("CreatedBy")
+  student                    Student?
+  reviewedApplications       RegistrationApplication[]  @relation("ReviewedBy")
+  createdContracts           Contract[]                 @relation("CreatedBy")
+  createdRegistrationPeriods RegistrationPeriod[]       @relation("CreatedRegistrationPeriods")
   passwordResetTokens   PasswordResetToken[]
   recordedMeterReadings MeterReading[]
   approvedInvoices      Invoice[]                 @relation("ApprovedBy")
@@ -226,19 +224,38 @@ model Student {
 
 // 6. RegistrationPeriod - Đợt đăng ký
 model RegistrationPeriod {
-  id        Int          @id @default(autoincrement())
-  name      String // "Đợt đăng ký KTX Kỳ 2025.2"
-  semester  String // "2025.2"
-  type      PeriodType // NEW_REGISTRATION / RENEWAL
-  startDate DateTime     @map("start_date")
-  endDate   DateTime     @map("end_date")
-  status    PeriodStatus @default(UPCOMING)
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @updatedAt @map("updated_at")
+  id           Int          @id @default(autoincrement())
+  code         String       @unique // "2025-2026-HK1"
+  name         String // "Đăng ký KTX HK1 năm học 2025-2026"
+  academicYear String       @map("academic_year") // "2025-2026"
+  semester     Int // 1 hoặc 2
+  description  String?
+  startDate    DateTime     @map("start_date")
+  endDate      DateTime     @map("end_date")
+  moveInDate   DateTime?    @map("move_in_date")
+  moveOutDate  DateTime?    @map("move_out_date")
+
+  maxApplicationsPerStudent Int     @default(1) @map("max_applications_per_student")
+  allowRoomPreference       Boolean @default(false) @map("allow_room_preference")
+  autoAssignRoom            Boolean @default(false) @map("auto_assign_room")
+  targetAdmissionYears      Int[]   @map("target_admission_years")
+
+  status PeriodStatus @default(DRAFT)
+
+  // Cached counters (updated by refreshStats)
+  totalApplications Int @default(0) @map("total_applications")
+  approvedCount     Int @default(0) @map("approved_count")
+  rejectedCount     Int @default(0) @map("rejected_count")
+  pendingCount      Int @default(0) @map("pending_count")
+
+  createdById Int?     @map("created_by_id")
+  createdBy   User?    @relation("CreatedRegistrationPeriods", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   applications RegistrationApplication[]
 
-  @@index([semester])
+  @@index([academicYear, semester])
   @@index([status])
   @@map("registration_periods")
 }
