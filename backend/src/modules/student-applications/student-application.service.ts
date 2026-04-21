@@ -67,29 +67,6 @@ export class StudentApplicationsService {
   ) {}
 
   // ========================================
-  // CALCULATE PRIORITY SCORE
-  // ========================================
-  private calculatePriorityScore(priorityInfo: any): number {
-    let score = 0;
-    const info = priorityInfo ?? {};
-
-    if (info.isFirstYear) score += 20;
-    if (info.isPoorHousehold) score += 15;
-    if (info.isNearPoor) score += 10;
-    if (info.isOrphan) score += 15;
-    if (info.isDisabled) score += 15;
-    if (info.isPolicyFamily) score += 10;
-    if (info.wasResident) score += 5;
-
-    const gpa = info.gpaLastSemester || 0;
-    if (gpa >= 3.6) score += 10;
-    else if (gpa >= 3.2) score += 7;
-    else if (gpa >= 2.5) score += 5;
-
-    return score;
-  }
-
-  // ========================================
   // GET ACTIVE PERIOD FOR STUDENT
   // ========================================
   async getActivePeriod(studentId: number) {
@@ -387,7 +364,7 @@ export class StudentApplicationsService {
   async updateStatus(id: number, dto: UpdateApplicationStatusDto, reviewerId: number) {
     const application = await this.prisma.registrationApplication.findUnique({
       where: { id },
-      include: { period: true },
+      include: { period: true, student: { select: { gender: true } } },
     });
 
     if (!application) {
@@ -426,6 +403,9 @@ export class StudentApplicationsService {
       }
       if (room._count.contracts >= room.capacity) {
         throw new BadRequestException('Phòng đã đầy');
+      }
+      if (room.gender !== (application as any).student.gender) {
+        throw new BadRequestException('Phòng không phù hợp giới tính sinh viên');
       }
 
       updateData.approvedRoomId = dto.assignedRoomId;

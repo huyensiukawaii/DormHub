@@ -15,7 +15,6 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
-  Building2,
   User,
   GraduationCap,
   RefreshCw,
@@ -27,10 +26,7 @@ import {
   Award,
   ThumbsUp,
   ThumbsDown,
-  Users,
-  Filter,
   Search,
-  ChevronDown,
   X,
   Sparkles,
 } from 'lucide-react';

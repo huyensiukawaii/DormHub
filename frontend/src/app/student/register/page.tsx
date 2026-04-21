@@ -310,11 +310,11 @@ export default function RegisterKTXPage() {
                 )}
 
                 <h3 className="text-sm font-medium text-slate-700 mb-2">
-                  PHÒNG CÒN TRỐNG ({availableRooms.filter((r) => !selectedRooms.includes(r.id)).length})
+                  PHÒNG CÒN TRỐNG ({availableRooms.filter((r) => !selectedRooms.includes(r.id) && r.availableSlots > 0).length})
                 </h3>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {availableRooms
-                    .filter((r) => !selectedRooms.includes(r.id))
+                    .filter((r) => !selectedRooms.includes(r.id) && r.availableSlots > 0)
                     .map((room) => (
                       <button
                         key={room.id}

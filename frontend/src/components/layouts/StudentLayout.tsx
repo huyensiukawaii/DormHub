@@ -190,17 +190,7 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
           </ul>
         </nav>
 
-        {/* Admin link */}
-        {user?.role === 'ADMIN' && (
-          <div className="p-3 border-t border-slate-100">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-            >
-              <span>← Về trang Admin</span>
-            </Link>
-          </div>
-        )}
+
       </aside>
 
       {/* Main content */}

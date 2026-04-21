@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   FileText, Search, ChevronLeft, ChevronRight,
   Clock, CheckCircle, XCircle, Star, Home,
   Loader2, AlertCircle, Eye, CalendarRange,
-  ArrowLeft, Users, TrendingUp, Circle,
+  ArrowLeft,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -217,6 +217,12 @@ function PeriodApplicationsView({ periodId }: { periodId: string }) {
     setPage(1);
   }, [searchInput]);
 
+  useEffect(() => {
+    api.get(`/registration-periods/${periodId}`)
+      .then((res) => setPeriod(res.data))
+      .catch(() => {});
+  }, [periodId]);
+
   const fetchApps = useCallback(async () => {
     try {
       setLoading(true);
@@ -230,12 +236,8 @@ function PeriodApplicationsView({ periodId }: { periodId: string }) {
       if (search) params.set('search', search);
       if (status) params.set('status', status);
 
-      const [appsRes, periodRes] = await Promise.all([
-        api.get(`/applications?${params}`),
-        period ? Promise.resolve({ data: period }) : api.get(`/registration-periods/${periodId}`),
-      ]);
+      const appsRes = await api.get(`/applications?${params}`);
       setApps(appsRes.data);
-      if (!period) setPeriod(periodRes.data);
     } catch {
       setError('Không thể tải dữ liệu');
     } finally {

@@ -176,81 +176,26 @@ async function main() {
 
   // ─── 5. Priority Documents ─────────────────────────────────────────────────
 
+  async function findOrCreateDoc(data: {
+    studentId: number; type: PriorityDocumentType; fileUrl: string;
+    fileName: string; publicId: string; status: DocumentStatus;
+    reviewedById?: number; reviewedAt?: Date;
+  }) {
+    return (
+      await prisma.priorityDocument.findFirst({ where: { studentId: data.studentId, type: data.type } }) ??
+      await prisma.priorityDocument.create({ data })
+    );
+  }
+
   // sv1: hộ nghèo → +15đ
-  const doc1 = await prisma.priorityDocument.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      studentId: sv1.id,
-      type: PriorityDocumentType.POOR_HOUSEHOLD,
-      fileUrl: 'https://example.com/docs/sv1-ho-ngheo.pdf',
-      fileName: 'ho-ngheo.pdf',
-      publicId: 'dormhub/sv1-ho-ngheo',
-      status: DocumentStatus.APPROVED,
-      reviewedById: admin.id,
-      reviewedAt: new Date('2024-08-01'),
-    },
-  });
-
+  await findOrCreateDoc({ studentId: sv1.id, type: PriorityDocumentType.POOR_HOUSEHOLD, fileUrl: 'https://example.com/docs/sv1-ho-ngheo.pdf', fileName: 'ho-ngheo.pdf', publicId: 'dormhub/sv1-ho-ngheo', status: DocumentStatus.APPROVED, reviewedById: admin.id, reviewedAt: new Date('2024-08-01') });
   // sv2: mồ côi (+15đ) + bảng điểm GPA 3.8 (+10đ) → 25đ
-  const doc2 = await prisma.priorityDocument.upsert({
-    where: { id: 2 },
-    update: {},
-    create: {
-      studentId: sv2.id,
-      type: PriorityDocumentType.ORPHAN,
-      fileUrl: 'https://example.com/docs/sv2-mo-coi.pdf',
-      fileName: 'mo-coi.pdf',
-      publicId: 'dormhub/sv2-mo-coi',
-      status: DocumentStatus.APPROVED,
-      reviewedById: admin.id,
-      reviewedAt: new Date('2024-08-01'),
-    },
-  });
-  const doc3 = await prisma.priorityDocument.upsert({
-    where: { id: 3 },
-    update: {},
-    create: {
-      studentId: sv2.id,
-      type: PriorityDocumentType.GPA_TRANSCRIPT,
-      fileUrl: 'https://example.com/docs/sv2-bang-diem.pdf',
-      fileName: 'bang-diem.pdf',
-      publicId: 'dormhub/sv2-gpa',
-      status: DocumentStatus.APPROVED,
-      reviewedById: admin.id,
-      reviewedAt: new Date('2024-08-01'),
-    },
-  });
-
+  await findOrCreateDoc({ studentId: sv2.id, type: PriorityDocumentType.ORPHAN, fileUrl: 'https://example.com/docs/sv2-mo-coi.pdf', fileName: 'mo-coi.pdf', publicId: 'dormhub/sv2-mo-coi', status: DocumentStatus.APPROVED, reviewedById: admin.id, reviewedAt: new Date('2024-08-01') });
+  await findOrCreateDoc({ studentId: sv2.id, type: PriorityDocumentType.GPA_TRANSCRIPT, fileUrl: 'https://example.com/docs/sv2-bang-diem.pdf', fileName: 'bang-diem.pdf', publicId: 'dormhub/sv2-gpa', status: DocumentStatus.APPROVED, reviewedById: admin.id, reviewedAt: new Date('2024-08-01') });
   // sv3: gia đình chính sách → +10đ
-  const doc4 = await prisma.priorityDocument.upsert({
-    where: { id: 4 },
-    update: {},
-    create: {
-      studentId: sv3.id,
-      type: PriorityDocumentType.POLICY_FAMILY,
-      fileUrl: 'https://example.com/docs/sv3-chinh-sach.pdf',
-      fileName: 'chinh-sach.pdf',
-      publicId: 'dormhub/sv3-policy',
-      status: DocumentStatus.APPROVED,
-      reviewedById: admin.id,
-      reviewedAt: new Date('2024-08-01'),
-    },
-  });
-
-  // sv6: có doc nộp nhưng chưa duyệt (PENDING)
-  const doc5 = await prisma.priorityDocument.upsert({
-    where: { id: 5 },
-    update: {},
-    create: {
-      studentId: sv6.id,
-      type: PriorityDocumentType.NEAR_POOR,
-      fileUrl: 'https://example.com/docs/sv6-can-ngheo.pdf',
-      fileName: 'can-ngheo.pdf',
-      publicId: 'dormhub/sv6-near-poor',
-      status: DocumentStatus.PENDING,
-    },
-  });
+  await findOrCreateDoc({ studentId: sv3.id, type: PriorityDocumentType.POLICY_FAMILY, fileUrl: 'https://example.com/docs/sv3-chinh-sach.pdf', fileName: 'chinh-sach.pdf', publicId: 'dormhub/sv3-policy', status: DocumentStatus.APPROVED, reviewedById: admin.id, reviewedAt: new Date('2024-08-01') });
+  // sv6: doc nộp nhưng chưa duyệt (PENDING)
+  await findOrCreateDoc({ studentId: sv6.id, type: PriorityDocumentType.NEAR_POOR, fileUrl: 'https://example.com/docs/sv6-can-ngheo.pdf', fileName: 'can-ngheo.pdf', publicId: 'dormhub/sv6-near-poor', status: DocumentStatus.PENDING });
 
   console.log(`✅ PriorityDocuments: doc1(sv1/POOR), doc2(sv2/ORPHAN), doc3(sv2/GPA), doc4(sv3/POLICY), doc5(sv6/NEAR_POOR-pending)`);
 
@@ -339,21 +284,15 @@ async function main() {
 
   // ─── 8. Applications – Đợt 1 (CLOSED) ────────────────────────────────────
 
+  async function findOrCreateApp(where: { studentId: number; periodId: number }, data: object) {
+    return await prisma.registrationApplication.findFirst({ where }) ?? await prisma.registrationApplication.create({ data: { ...where, ...data } as any });
+  }
+
   // sv1: APPROVED, được duyệt vào A101 (15đ từ hộ nghèo)
-  const app1 = await prisma.registrationApplication.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      studentId: sv1.id,
-      periodId: period1.id,
-      type: ApplicationType.NEW,
-      isPoorHousehold: true,
-      priorityScore: 15,
-      status: ApplicationStatus.APPROVED,
-      approvedRoomId: rA101.id,
-      reviewedById: admin.id,
-      reviewedAt: new Date('2024-08-20'),
-    },
+  const app1 = await findOrCreateApp({ studentId: sv1.id, periodId: period1.id }, {
+    type: ApplicationType.NEW, isPoorHousehold: true, priorityScore: 15,
+    status: ApplicationStatus.APPROVED, approvedRoomId: rA101.id,
+    reviewedById: admin.id, reviewedAt: new Date('2024-08-20'),
   });
   await prisma.roomChoice.upsert({
     where: { applicationId_priority: { applicationId: app1.id, priority: 1 } },
@@ -384,32 +323,15 @@ async function main() {
   });
 
   // sv5 (K66): REJECTED
-  const app2 = await prisma.registrationApplication.upsert({
-    where: { id: 2 },
-    update: {},
-    create: {
-      studentId: sv5.id,
-      periodId: period1.id,
-      type: ApplicationType.NEW,
-      priorityScore: 0,
-      status: ApplicationStatus.REJECTED,
-      rejectionReason: 'Không đủ điểm ưu tiên tối thiểu. Vui lòng thử lại đợt sau.',
-      reviewedById: staff.id,
-      reviewedAt: new Date('2024-08-20'),
-    },
+  await findOrCreateApp({ studentId: sv5.id, periodId: period1.id }, {
+    type: ApplicationType.NEW, priorityScore: 0, status: ApplicationStatus.REJECTED,
+    rejectionReason: 'Không đủ điểm ưu tiên tối thiểu. Vui lòng thử lại đợt sau.',
+    reviewedById: staff.id, reviewedAt: new Date('2024-08-20'),
   });
 
   // sv6: CANCELLED (tự hủy)
-  const app3 = await prisma.registrationApplication.upsert({
-    where: { id: 3 },
-    update: {},
-    create: {
-      studentId: sv6.id,
-      periodId: period1.id,
-      type: ApplicationType.NEW,
-      priorityScore: 0,
-      status: ApplicationStatus.CANCELLED,
-    },
+  await findOrCreateApp({ studentId: sv6.id, periodId: period1.id }, {
+    type: ApplicationType.NEW, priorityScore: 0, status: ApplicationStatus.CANCELLED,
   });
 
   console.log(`✅ Apps HK1: app1(sv1/APPROVED/A101), app2(sv5/REJECTED), app3(sv6/CANCELLED)`);
@@ -417,118 +339,40 @@ async function main() {
   // ─── 9. Applications – Đợt 2 (OPEN, đang chờ duyệt) ─────────────────────
 
   // sv2: PENDING, 25đ (mồ côi+GPA), nguyện vọng A102 > A101
-  const app4 = await prisma.registrationApplication.upsert({
-    where: { id: 4 },
-    update: {},
-    create: {
-      studentId: sv2.id,
-      periodId: period2.id,
-      type: ApplicationType.NEW,
-      isOrphan: true,
-      gpaLastSemester: 3.8,
-      priorityScore: 25,
-      status: ApplicationStatus.PENDING,
-    },
+  const app4 = await findOrCreateApp({ studentId: sv2.id, periodId: period2.id }, {
+    type: ApplicationType.NEW, isOrphan: true, gpaLastSemester: 3.8, priorityScore: 25, status: ApplicationStatus.PENDING,
   });
-  await prisma.roomChoice.upsert({
-    where: { applicationId_priority: { applicationId: app4.id, priority: 1 } },
-    update: {},
-    create: { applicationId: app4.id, roomId: rA102.id, priority: 1 },
-  });
-  await prisma.roomChoice.upsert({
-    where: { applicationId_priority: { applicationId: app4.id, priority: 2 } },
-    update: {},
-    create: { applicationId: app4.id, roomId: rA101.id, priority: 2 },
-  });
+  await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app4.id, priority: 1 } }, update: {}, create: { applicationId: app4.id, roomId: rA102.id, priority: 1 } });
+  await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app4.id, priority: 2 } }, update: {}, create: { applicationId: app4.id, roomId: rA101.id, priority: 2 } });
 
   // sv3: PENDING, 10đ (gia đình chính sách), nguyện vọng B102 > B101
-  const app5 = await prisma.registrationApplication.upsert({
-    where: { id: 5 },
-    update: {},
-    create: {
-      studentId: sv3.id,
-      periodId: period2.id,
-      type: ApplicationType.NEW,
-      isPolicyFamily: true,
-      priorityScore: 10,
-      status: ApplicationStatus.PENDING,
-    },
+  const app5 = await findOrCreateApp({ studentId: sv3.id, periodId: period2.id }, {
+    type: ApplicationType.NEW, isPolicyFamily: true, priorityScore: 10, status: ApplicationStatus.PENDING,
   });
-  await prisma.roomChoice.upsert({
-    where: { applicationId_priority: { applicationId: app5.id, priority: 1 } },
-    update: {},
-    create: { applicationId: app5.id, roomId: rB102.id, priority: 1 },
-  });
-  await prisma.roomChoice.upsert({
-    where: { applicationId_priority: { applicationId: app5.id, priority: 2 } },
-    update: {},
-    create: { applicationId: app5.id, roomId: rB101.id, priority: 2 },
-  });
+  await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app5.id, priority: 1 } }, update: {}, create: { applicationId: app5.id, roomId: rB102.id, priority: 1 } });
+  await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app5.id, priority: 2 } }, update: {}, create: { applicationId: app5.id, roomId: rB101.id, priority: 2 } });
 
   // sv4: PENDING gia hạn (đang ở B101), 0đ
-  const app6 = await prisma.registrationApplication.upsert({
-    where: { id: 6 },
-    update: {},
-    create: {
-      studentId: sv4.id,
-      periodId: period2.id,
-      type: ApplicationType.RENEWAL,
-      currentRoomId: rB101.id,
-      wantSameRoom: true,
-      priorityScore: 0,
-      status: ApplicationStatus.PENDING,
-    },
+  await findOrCreateApp({ studentId: sv4.id, periodId: period2.id }, {
+    type: ApplicationType.RENEWAL, currentRoomId: rB101.id, wantSameRoom: true, priorityScore: 0, status: ApplicationStatus.PENDING,
   });
 
   // sv5 (K66): PENDING, 0đ – không có tài liệu ưu tiên
-  const app7 = await prisma.registrationApplication.upsert({
-    where: { id: 7 },
-    update: {},
-    create: {
-      studentId: sv5.id,
-      periodId: period2.id,
-      type: ApplicationType.NEW,
-      priorityScore: 0,
-      status: ApplicationStatus.PENDING,
-    },
+  const app7 = await findOrCreateApp({ studentId: sv5.id, periodId: period2.id }, {
+    type: ApplicationType.NEW, priorityScore: 0, status: ApplicationStatus.PENDING,
   });
-  await prisma.roomChoice.upsert({
-    where: { applicationId_priority: { applicationId: app7.id, priority: 1 } },
-    update: {},
-    create: { applicationId: app7.id, roomId: rA201.id, priority: 1 },
-  });
+  await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app7.id, priority: 1 } }, update: {}, create: { applicationId: app7.id, roomId: rA201.id, priority: 1 } });
 
   // sv6: PENDING, 0đ (doc chưa duyệt nên không được tính)
-  const app8 = await prisma.registrationApplication.upsert({
-    where: { id: 8 },
-    update: {},
-    create: {
-      studentId: sv6.id,
-      periodId: period2.id,
-      type: ApplicationType.NEW,
-      priorityScore: 0,
-      status: ApplicationStatus.PENDING,
-    },
+  await findOrCreateApp({ studentId: sv6.id, periodId: period2.id }, {
+    type: ApplicationType.NEW, priorityScore: 0, status: ApplicationStatus.PENDING,
   });
 
-  // sv1: PENDING đợt 2 (gia hạn sau khi HĐ HK1 hết hạn), 15đ
-  const app9 = await prisma.registrationApplication.upsert({
-    where: { id: 9 },
-    update: {},
-    create: {
-      studentId: sv1.id,
-      periodId: period2.id,
-      type: ApplicationType.NEW,
-      isPoorHousehold: true,
-      priorityScore: 15,
-      status: ApplicationStatus.PENDING,
-    },
+  // sv1: PENDING đợt 2, 15đ
+  const app9 = await findOrCreateApp({ studentId: sv1.id, periodId: period2.id }, {
+    type: ApplicationType.NEW, isPoorHousehold: true, priorityScore: 15, status: ApplicationStatus.PENDING,
   });
-  await prisma.roomChoice.upsert({
-    where: { applicationId_priority: { applicationId: app9.id, priority: 1 } },
-    update: {},
-    create: { applicationId: app9.id, roomId: rA101.id, priority: 1 },
-  });
+  await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app9.id, priority: 1 } }, update: {}, create: { applicationId: app9.id, roomId: rA101.id, priority: 1 } });
 
   console.log(`✅ Apps HK2: app4(sv2/25đ), app5(sv3/10đ), app6(sv4/gia-hạn), app7(sv5/0đ), app8(sv6/0đ), app9(sv1/15đ)`);
 

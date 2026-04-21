@@ -181,7 +181,7 @@ export default function StudentProfile() {
         dateOfBirth: formData.dateOfBirth || undefined,
         idCardNumber: formData.idCardNumber || undefined,
         hometownProvince: formData.hometownProvince || undefined,
-        hometownDistance: formData.hometownDistance || undefined,
+        hometownDistance: formData.hometownDistance ?? undefined,
         emergencyContactName: formData.emergencyContactName || undefined,
         emergencyContactPhone: formData.emergencyContactPhone || undefined,
         emergencyContactRelation: formData.emergencyContactRelation || undefined,

@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PriorityDocumentsService } from './priority-documents.service';
+import { ReviewDocumentDto } from './dto/review-document.dto';
 import { PriorityDocumentType, DocumentStatus } from '@prisma/client';
 
 async function proxyFile(fileUrl: string, fileName: string, res: Response): Promise<void> {
@@ -145,9 +146,9 @@ export class AdminPriorityDocsController {
   @ApiOperation({ summary: 'Duyệt hoặc từ chối minh chứng' })
   async review(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { action: 'APPROVED' | 'REJECTED'; reviewNote?: string },
+    @Body() dto: ReviewDocumentDto,
     @Request() req: any,
   ) {
-    return this.service.review(id, req.user.id, body.action, body.reviewNote);
+    return this.service.review(id, req.user.id, dto.action, dto.reviewNote);
   }
 }
