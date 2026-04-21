@@ -21,6 +21,7 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 import { getStoredUser, clearAuth, type User } from '@/lib/auth';
 
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: 'Sinh viên', href: '/students', icon: Users },
   { label: 'Đợt đăng ký', href: '/registration-periods', icon: CalendarRange },
   { label: 'Đơn đăng ký', href: '/applications', icon: FileText },
+  { label: 'Minh chứng ưu tiên', href: '/priority-documents', icon: ShieldCheck },
   { label: 'Hợp đồng', href: '/contracts', icon: FileSignature },
   { label: 'Công tơ', href: '/meters', icon: Zap },
   { label: 'Hóa đơn', href: '/invoices', icon: Receipt },

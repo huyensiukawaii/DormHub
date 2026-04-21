@@ -20,12 +20,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: { sub: number; email: string }) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      include: { student: { select: { id: true } } },
     });
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị khóa');
     }
 
-    return user;
+    return {
+      ...user,
+      studentId: (user as any).student?.id ?? null,
+    };
   }
 }

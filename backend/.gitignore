@@ -12,5 +12,8 @@ coverage/
 # Local scripts
 hash-password.ts
 
+# Test files
+**/*.spec.ts
+
 # Logs
 *.log

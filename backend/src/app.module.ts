@@ -7,19 +7,23 @@ import { BuildingsModule } from './modules/buildings/buildings.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { StudentsModule } from './modules/students/students.module';
 import { RegistrationPeriodsModule } from './modules/registration-periods/registration-periods.module';
+import { StudentApplicationsModule } from './modules/student-applications/student-application.module';
+import { CloudinaryModule } from './common/cloudinary/cloudinary.module';
+import { PriorityDocumentsModule } from './modules/priority-documents/priority-documents.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-    StudentsModule,
-    RoomsModule,
-    BuildingsModule,
+    ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    CloudinaryModule,
     AuthModule,
+    BuildingsModule,
+    RoomsModule,
+    StudentsModule,
     RegistrationPeriodsModule,
+    StudentApplicationsModule,
+    PriorityDocumentsModule,
   ],
 })
 export class AppModule {}
