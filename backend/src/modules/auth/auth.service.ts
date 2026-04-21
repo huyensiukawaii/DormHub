@@ -141,12 +141,24 @@ export class AuthService {
   async getProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { student: true },
+      include: {
+        student: {
+          include: {
+            contracts: {
+              where: { status: 'ACTIVE' },
+              include: { room: { include: { building: true } } },
+              take: 1,
+            },
+          },
+        },
+      },
     });
 
     if (!user) {
       throw new UnauthorizedException();
     }
+
+    const activeContract = user.student?.contracts?.[0] ?? null;
 
     return {
       id: user.id,
@@ -156,6 +168,13 @@ export class AuthService {
       phone: user.phone,
       avatarUrl: user.avatarUrl,
       student: user.student,
+      currentRoom: activeContract
+        ? {
+            id: activeContract.room.id,
+            code: activeContract.room.code,
+            buildingName: activeContract.room.building.name,
+          }
+        : null,
     };
   }
 

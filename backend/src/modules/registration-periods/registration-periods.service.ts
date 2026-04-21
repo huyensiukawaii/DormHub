@@ -485,7 +485,9 @@ export class RegistrationPeriodsService {
       if (app.student.gender === 'MALE') maleCount++;
       else femaleCount++;
 
-      const year = parseInt(app.student.studentCode.substring(0, 4)) || 0;
+      // studentCode format: B22DCCN001 → chars 1-2 = "22" = enrollment year suffix
+      const codeYearSuffix = parseInt(app.student.studentCode.substring(1, 3));
+      const year = !isNaN(codeYearSuffix) ? 2000 + codeYearSuffix : 0;
       yearCounts[year] = (yearCounts[year] || 0) + 1;
     });
 

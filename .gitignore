@@ -41,3 +41,6 @@ coverage/
 # Misc
 *.pem
 .turbo/
+
+# Claude Code
+.claude/

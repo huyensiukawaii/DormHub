@@ -245,10 +245,30 @@ export default function RegistrationPeriodsPage() {
     setOpenMenuId(null);
   };
 
+  const formatApiError = (message: unknown): string => {
+    if (Array.isArray(message)) return message.join(' • ');
+    if (typeof message === 'string') return message;
+    return 'Có lỗi xảy ra';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormLoading(true);
     setFormError('');
+
+    if (formData.code.trim().length < 5) {
+      setFormError('Mã đợt phải có ít nhất 5 ký tự');
+      return;
+    }
+    if (formData.name.trim().length < 5) {
+      setFormError('Tên đợt đăng ký phải có ít nhất 5 ký tự');
+      return;
+    }
+    if (!formData.startDate || !formData.endDate) {
+      setFormError('Vui lòng chọn thời gian bắt đầu và kết thúc');
+      return;
+    }
+
+    setFormLoading(true);
 
     try {
       const payload = {
@@ -271,7 +291,7 @@ export default function RegistrationPeriodsPage() {
       setShowModal(false);
       fetchPeriods();
     } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Có lỗi xảy ra');
+      setFormError(formatApiError(err.response?.data?.message));
     } finally {
       setFormLoading(false);
     }

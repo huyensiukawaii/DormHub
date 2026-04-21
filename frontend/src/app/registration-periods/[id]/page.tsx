@@ -324,7 +324,7 @@ export default function RegistrationPeriodDetailPage() {
                 <div className="flex flex-wrap gap-1">
                   {period.targetAdmissionYears.map((year) => (
                     <span key={year} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded">
-                      K{year - 1956}
+                      K{year - 1955}
                     </span>
                   ))}
                 </div>
@@ -440,7 +440,7 @@ export default function RegistrationPeriodDetailPage() {
                       const percentage = (item.count / maxCount) * 100;
                       return (
                         <div key={item.year} className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-slate-600 w-12">K{item.year - 1956}</span>
+                          <span className="text-sm font-medium text-slate-600 w-12">K{item.year - 1955}</span>
                           <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden">
                             <div
                               className="h-full bg-emerald-500 rounded-lg flex items-center justify-end pr-2"
