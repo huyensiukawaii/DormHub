@@ -24,6 +24,7 @@ import {
   ChevronRight,
   HeartHandshake,
   X,
+  Crown,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { MAJORS } from '@/lib/constants';
@@ -64,6 +65,7 @@ interface Student {
 interface Contract {
   id: number;
   contractNumber: string;
+  isRoomLeader: boolean;
   room: {
     id: number;
     code: string;
@@ -522,9 +524,14 @@ export default function StudentDetailPage() {
                             </p>
                             {getContractStatusBadge(contract.status)}
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Mã HĐ: {contract.contractNumber}
-                          </p>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <p className="text-xs text-slate-500">Mã HĐ: {contract.contractNumber}</p>
+                            {contract.isRoomLeader && (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                                <Crown className="w-3 h-3" /> Trưởng phòng
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3.5 h-3.5" />

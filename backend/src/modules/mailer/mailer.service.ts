@@ -150,6 +150,73 @@ export class MailerService {
     return true;
   }
 
+  async sendApplicationApprovedEmail(params: {
+    to: string;
+    studentName: string;
+    periodName: string;
+    roomCode: string;
+    buildingName: string;
+    moveInDate?: string | null;
+    moveOutDate?: string | null;
+    loginUrl: string;
+  }): Promise<boolean> {
+    const appName = this.configService.get<string>('APP_NAME', 'DormHub');
+    const subject = `[${appName}] Đơn đăng ký KTX của bạn đã được duyệt`;
+
+    const formatDate = (d: string) =>
+      new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const moveInRowHtml = params.moveInDate
+      ? `<tr><td style="font-size:14px;color:#374151;padding:4px 0">&#128197; Ngày nhận phòng</td><td style="font-size:14px;font-weight:700;color:#111827;text-align:right">${formatDate(params.moveInDate)}</td></tr>`
+      : '';
+    const moveOutRowHtml = params.moveOutDate
+      ? `<tr><td style="font-size:14px;color:#374151;padding:4px 0">&#128197; Ngày trả phòng</td><td style="font-size:14px;font-weight:700;color:#111827;text-align:right">${formatDate(params.moveOutDate)}</td></tr>`
+      : '';
+
+    const html = await this.renderHtmlTemplate({
+      templateFileName: 'application-approved.html',
+      variables: {
+        appName,
+        studentName: params.studentName,
+        periodName: params.periodName,
+        roomCode: params.roomCode,
+        buildingName: params.buildingName,
+        loginUrl: params.loginUrl,
+        year: new Date().getFullYear(),
+      },
+      rawVariables: { moveInRowHtml, moveOutRowHtml },
+    });
+
+    const text = `Xin chào ${params.studentName},\n\nĐơn đăng ký KTX của bạn cho đợt ${params.periodName} đã được duyệt.\nPhòng: ${params.roomCode} - ${params.buildingName}\n${params.moveInDate ? `Ngày nhận phòng: ${formatDate(params.moveInDate)}\n` : ''}Đăng nhập tại: ${params.loginUrl}`;
+
+    return this.sendMail({ to: params.to, subject, text, html });
+  }
+
+  async sendApplicationRejectedEmail(params: {
+    to: string;
+    studentName: string;
+    periodName: string;
+    rejectionReason: string;
+  }): Promise<boolean> {
+    const appName = this.configService.get<string>('APP_NAME', 'DormHub');
+    const subject = `[${appName}] Kết quả xét duyệt đơn đăng ký KTX`;
+
+    const html = await this.renderHtmlTemplate({
+      templateFileName: 'application-rejected.html',
+      variables: {
+        appName,
+        studentName: params.studentName,
+        periodName: params.periodName,
+        rejectionReason: params.rejectionReason,
+        year: new Date().getFullYear(),
+      },
+    });
+
+    const text = `Xin chào ${params.studentName},\n\nĐơn đăng ký KTX của bạn cho đợt ${params.periodName} chưa được chấp thuận.\nLý do: ${params.rejectionReason}\n\nBạn có thể nộp đơn lại ở các đợt tiếp theo.`;
+
+    return this.sendMail({ to: params.to, subject, text, html });
+  }
+
   async sendPasswordResetEmail(to: string, resetUrl: string, rawToken?: string): Promise<boolean> {
     const appName = this.configService.get<string>('APP_NAME', 'DormHub');
     const ttlRaw = this.configService.get<string>('RESET_PASSWORD_TTL_MINUTES');

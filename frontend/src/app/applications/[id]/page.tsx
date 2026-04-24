@@ -29,6 +29,7 @@ import {
   Search,
   X,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -116,6 +117,7 @@ interface ApplicationDetail {
   };
 
   approvedDocuments: Array<{ type: string; fileName: string; fileUrl: string }>;
+  pendingDocuments: Array<{ id: number; type: string; fileName: string }>;
 }
 
 interface AvailableRoom {
@@ -132,6 +134,7 @@ interface AvailableRoom {
   pricePerMonth: number;
   isUserPreference: boolean;
   preferencePriority: number | null;
+  isCurrentRoom?: boolean;
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -668,6 +671,19 @@ export default function AdminApplicationDetailPage() {
               </button>
             </div>
 
+            {/* Warning: pending documents */}
+            {application.pendingDocuments.length > 0 && (
+              <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-800">
+                  <span className="font-semibold">Lưu ý:</span> Sinh viên này có{' '}
+                  <span className="font-semibold">{application.pendingDocuments.length} minh chứng ưu tiên chưa được duyệt</span>
+                  {' '}({application.pendingDocuments.map((d) => DOC_TYPE_LABELS[d.type] ?? d.type).join(', ')}).
+                  Điểm ưu tiên hiện tại (<span className="font-semibold">{application.priorityScore} điểm</span>) có thể thay đổi sau khi duyệt minh chứng.
+                </div>
+              </div>
+            )}
+
             {/* Filters */}
             <div className="p-4 border-b border-slate-200 space-y-3">
               <div className="flex items-center gap-3 flex-wrap">
@@ -737,7 +753,12 @@ export default function AdminApplicationDetailPage() {
                               <p className="font-semibold text-slate-800">
                                 {room.code} - {room.buildingName}
                               </p>
-                              {room.isUserPreference && (
+                              {room.isCurrentRoom ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                                  <Home className="w-3 h-3" />
+                                  Phòng hiện tại
+                                </span>
+                              ) : room.isUserPreference && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
                                   <Sparkles className="w-3 h-3" />
                                   NV{room.preferencePriority}

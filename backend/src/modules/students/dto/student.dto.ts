@@ -271,6 +271,7 @@ export class StudentDetailResponseDto extends StudentResponseDto {
   currentContract?: {
     id: number;
     contractNumber: string;
+    isRoomLeader: boolean;
     room: {
       id: number;
       code: string;
@@ -286,6 +287,7 @@ export class StudentDetailResponseDto extends StudentResponseDto {
   contractHistory: Array<{
     id: number;
     contractNumber: string;
+    isRoomLeader: boolean;
     room: {
       id: number;
       code: string;

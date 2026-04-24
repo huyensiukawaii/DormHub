@@ -311,10 +311,16 @@ export default function RegistrationPeriodDetailPage() {
                 </span>
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-slate-600">Tự động xếp phòng</span>
-                <span className={`text-sm font-medium ${period.autoAssignRoom ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  {period.autoAssignRoom ? 'Có' : 'Không'}
-                </span>
+                <span className="text-sm text-slate-600">Phương thức duyệt</span>
+                {period.autoAssignRoom ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                    Duyệt tự động
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                    Xét duyệt theo ưu tiên
+                  </span>
+                )}
               </div>
             </div>
 

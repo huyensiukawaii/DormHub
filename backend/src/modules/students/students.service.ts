@@ -242,6 +242,7 @@ export class StudentsService {
     const contractHistory = student.contracts.map((contract) => ({
       id: contract.id,
       contractNumber: contract.code,
+      isRoomLeader: contract.isRoomLeader,
       room: {
         id: contract.room.id,
         code: contract.room.code,
@@ -293,6 +294,7 @@ export class StudentsService {
         ? {
             id: activeContract.id,
             contractNumber: activeContract.code,
+            isRoomLeader: activeContract.isRoomLeader,
             room: {
               id: activeContract.room.id,
               code: activeContract.room.code,

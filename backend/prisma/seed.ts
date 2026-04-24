@@ -203,7 +203,7 @@ async function main() {
 
   const contract4 = await prisma.contract.upsert({
     where: { code: 'HD-2024-004' },
-    update: {},
+    update: { status: ContractStatus.EXPIRED },
     create: {
       code: 'HD-2024-004',
       studentId: sv4.id,
@@ -375,6 +375,233 @@ async function main() {
   await prisma.roomChoice.upsert({ where: { applicationId_priority: { applicationId: app9.id, priority: 1 } }, update: {}, create: { applicationId: app9.id, roomId: rA101.id, priority: 1 } });
 
   console.log(`✅ Apps HK2: app4(sv2/25đ), app5(sv3/10đ), app6(sv4/gia-hạn), app7(sv5/0đ), app8(sv6/0đ), app9(sv1/15đ)`);
+
+  // ─── 10. Extra data for realistic dashboard ────────────────────────────────
+
+  // Thêm phòng cho tòa A và B
+  const extraRooms = await Promise.all([
+    prisma.room.upsert({ where: { code: 'A104' }, update: {}, create: { code: 'A104', buildingId: bldA.id, floor: 1, gender: Gender.MALE, roomType: RoomType.STANDARD, capacity: 6, pricePerMonth: 350000 } }),
+    prisma.room.upsert({ where: { code: 'A105' }, update: {}, create: { code: 'A105', buildingId: bldA.id, floor: 1, gender: Gender.MALE, roomType: RoomType.AIR_CONDITIONED, capacity: 4, pricePerMonth: 550000 } }),
+    prisma.room.upsert({ where: { code: 'A202' }, update: {}, create: { code: 'A202', buildingId: bldA.id, floor: 2, gender: Gender.MALE, roomType: RoomType.STANDARD, capacity: 6, pricePerMonth: 350000 } }),
+    prisma.room.upsert({ where: { code: 'A203' }, update: {}, create: { code: 'A203', buildingId: bldA.id, floor: 2, gender: Gender.MALE, roomType: RoomType.AIR_CONDITIONED, capacity: 4, pricePerMonth: 550000 } }),
+    prisma.room.upsert({ where: { code: 'A301' }, update: {}, create: { code: 'A301', buildingId: bldA.id, floor: 3, gender: Gender.MALE, roomType: RoomType.STANDARD, capacity: 6, pricePerMonth: 350000 } }),
+    prisma.room.upsert({ where: { code: 'B103' }, update: {}, create: { code: 'B103', buildingId: bldB.id, floor: 1, gender: Gender.FEMALE, roomType: RoomType.AIR_CONDITIONED, capacity: 4, pricePerMonth: 550000 } }),
+    prisma.room.upsert({ where: { code: 'B202' }, update: {}, create: { code: 'B202', buildingId: bldB.id, floor: 2, gender: Gender.FEMALE, roomType: RoomType.STANDARD, capacity: 6, pricePerMonth: 350000 } }),
+    prisma.room.upsert({ where: { code: 'B203' }, update: {}, create: { code: 'B203', buildingId: bldB.id, floor: 2, gender: Gender.FEMALE, roomType: RoomType.AIR_CONDITIONED, capacity: 4, pricePerMonth: 550000 } }),
+    prisma.room.upsert({ where: { code: 'B301' }, update: {}, create: { code: 'B301', buildingId: bldB.id, floor: 3, gender: Gender.FEMALE, roomType: RoomType.STANDARD, capacity: 6, pricePerMonth: 350000 } }),
+  ]);
+  console.log(`✅ Extra rooms added: ${extraRooms.map(r => r.code).join(', ')}`);
+
+  // Thêm sinh viên sv7-sv16
+  const extraStudentDefs = [
+    { email: 'sv7@dormhub.com',  name: 'Đinh Văn Giang',    gender: Gender.MALE,   code: 'B22DCCN007', faculty: 'Công nghệ thông tin', cls: 'D22CQCN01-N', province: 'Hà Tĩnh',   dist: 350 },
+    { email: 'sv8@dormhub.com',  name: 'Bùi Quang Hải',     gender: Gender.MALE,   code: 'B22DCDT008', faculty: 'Điện tử',            cls: 'D22CQDT01-N', province: 'Quảng Bình', dist: 500 },
+    { email: 'sv9@dormhub.com',  name: 'Ngô Thành Long',     gender: Gender.MALE,   code: 'B23DCCN001', faculty: 'Công nghệ thông tin', cls: 'D23CQCN01-N', province: 'Nghệ An',    dist: 300 },
+    { email: 'sv10@dormhub.com', name: 'Lý Minh Tuấn',      gender: Gender.MALE,   code: 'B23DCCN002', faculty: 'Điện tử Viễn thông', cls: 'D23CQVT01-N', province: 'Thanh Hóa',  dist: 150 },
+    { email: 'sv11@dormhub.com', name: 'Trương Văn Khoa',   gender: Gender.MALE,   code: 'B23DCDT003', faculty: 'Điện tử',            cls: 'D23CQDT01-N', province: 'Hải Phòng',  dist: 100 },
+    { email: 'sv12@dormhub.com', name: 'Nguyễn Thị Hoa',   gender: Gender.FEMALE, code: 'B22DCVT009', faculty: 'Viễn thông',         cls: 'D22CQVT01-N', province: 'Nam Định',    dist: 90  },
+    { email: 'sv13@dormhub.com', name: 'Vũ Thị Lan',        gender: Gender.FEMALE, code: 'B22DCCN010', faculty: 'Công nghệ thông tin', cls: 'D22CQCN02-N', province: 'Thái Bình',  dist: 110 },
+    { email: 'sv14@dormhub.com', name: 'Đặng Thị Mai',      gender: Gender.FEMALE, code: 'B23DCCN004', faculty: 'Công nghệ thông tin', cls: 'D23CQCN02-N', province: 'Ninh Bình',  dist: 120 },
+    { email: 'sv15@dormhub.com', name: 'Phan Thị Ngọc',     gender: Gender.FEMALE, code: 'B23DCVT005', faculty: 'Viễn thông',         cls: 'D23CQVT01-N', province: 'Hà Nam',      dist: 60  },
+    { email: 'sv16@dormhub.com', name: 'Hoàng Thị Phương',  gender: Gender.FEMALE, code: 'B23DCDT006', faculty: 'Điện tử',            cls: 'D23CQDT02-N', province: 'Bắc Ninh',    dist: 30  },
+  ];
+
+  const extraStudents: any[] = [];
+  for (const def of extraStudentDefs) {
+    const u = await prisma.user.upsert({
+      where: { email: def.email },
+      update: {},
+      create: { email: def.email, passwordHash: pw, role: UserRole.STUDENT, fullName: def.name, isActive: true },
+    });
+    const s = await prisma.student.upsert({
+      where: { studentCode: def.code },
+      update: {},
+      create: {
+        userId: u.id, studentCode: def.code, fullName: def.name,
+        gender: def.gender, faculty: def.faculty, className: def.cls,
+        hometownProvince: def.province, hometownDistance: def.dist,
+      },
+    });
+    extraStudents.push(s);
+  }
+  console.log(`✅ Extra students: sv7-sv16`);
+
+  // Hợp đồng ACTIVE học kỳ hiện tại (2025-2026 HK2)
+  // sv1, sv2, sv3 không có contract ở đây vì họ có PENDING applications
+  const contractDefs = [
+    { code: 'HD-2026-001', studentId: extraStudents[0].id, roomCode: 'A101' },
+    { code: 'HD-2026-002', studentId: extraStudents[1].id, roomCode: 'A101' },
+    { code: 'HD-2026-003', studentId: extraStudents[2].id, roomCode: 'A101' },
+    { code: 'HD-2026-004', studentId: extraStudents[3].id, roomCode: 'A201' },
+    { code: 'HD-2026-005', studentId: extraStudents[4].id, roomCode: 'A201' },
+    { code: 'HD-2026-006', studentId: extraStudents[5].id, roomCode: 'B201' },
+    { code: 'HD-2026-007', studentId: extraStudents[6].id, roomCode: 'B201' },
+    { code: 'HD-2026-008', studentId: extraStudents[7].id, roomCode: 'B102' },
+    { code: 'HD-2026-009', studentId: extraStudents[8].id, roomCode: 'B202' },
+    { code: 'HD-2026-010', studentId: extraStudents[9].id, roomCode: 'B202' },
+    // sv1, sv2, sv3 giữ nguyên PENDING applications – không tạo contract trước
+    // để admin có thể duyệt đơn và tạo hợp đồng cho họ
+  ];
+
+  for (const def of contractDefs) {
+    const room = await prisma.room.findUnique({ where: { code: def.roomCode } });
+    if (!room) continue;
+    // Kiểm tra không tạo trùng cho sinh viên đã có hợp đồng active
+    const existing = await prisma.contract.findFirst({
+      where: { code: def.code },
+    });
+    if (!existing) {
+      const alreadyActive = await prisma.contract.findFirst({
+        where: { studentId: def.studentId, status: ContractStatus.ACTIVE },
+      });
+      if (!alreadyActive) {
+        await prisma.contract.create({
+          data: {
+            code: def.code,
+            studentId: def.studentId,
+            roomId: room.id,
+            startDate: new Date('2026-02-10'),
+            endDate: new Date('2026-06-30'),
+            monthlyRent: room.pricePerMonth,
+            status: ContractStatus.ACTIVE,
+            checkedInAt: new Date('2026-02-10'),
+            createdById: admin.id,
+          },
+        });
+      }
+    }
+  }
+  console.log(`✅ Active contracts for current semester created`);
+
+  // Hóa đơn 6 tháng gần nhất (Nov 2025 → Apr 2026) - trạng thái PAID
+  const invoiceMonths = [
+    { month: new Date('2025-11-01'), label: '2025-11' },
+    { month: new Date('2025-12-01'), label: '2025-12' },
+    { month: new Date('2026-01-01'), label: '2026-01' },
+    { month: new Date('2026-02-01'), label: '2026-02' },
+    { month: new Date('2026-03-01'), label: '2026-03' },
+    { month: new Date('2026-04-01'), label: '2026-04' },
+  ];
+
+  // Các phòng có người ở để tạo hóa đơn
+  const billedRooms = [
+    { roomCode: 'A101', rent: 350000, occupants: 3 },
+    { roomCode: 'A103', roomType: 'AIR_CONDITIONED', rent: 550000, occupants: 1 },
+    { roomCode: 'A201', rent: 350000, occupants: 2 },
+    { roomCode: 'A202', rent: 350000, occupants: 1 },
+    { roomCode: 'B101', rent: 350000, occupants: 3 },
+    { roomCode: 'B102', rent: 550000, occupants: 1 },
+    { roomCode: 'B201', rent: 350000, occupants: 2 },
+    { roomCode: 'B202', rent: 350000, occupants: 2 },
+  ];
+
+  for (const inv of invoiceMonths) {
+    for (const br of billedRooms) {
+      const room = await prisma.room.findUnique({ where: { code: br.roomCode } });
+      if (!room) continue;
+
+      const invoiceCode = `INV-${inv.label}-${br.roomCode}`;
+      const existing = await prisma.invoice.findFirst({ where: { code: invoiceCode } });
+      if (existing) continue;
+
+      const electricityUsage = 80 + Math.floor(Math.random() * 40); // 80-120 kWh
+      const electricityFee = electricityUsage * 3500;
+      const waterUsage = br.occupants * 4;
+      const waterFee = br.occupants * 30000;
+      const roomFee = Number(br.rent) * br.occupants;
+      const totalAmount = roomFee + electricityFee + waterFee;
+
+      const dueDate = new Date(inv.month);
+      dueDate.setDate(20);
+
+      const paidAt = new Date(inv.month);
+      paidAt.setDate(15);
+
+      await prisma.invoice.create({
+        data: {
+          code: invoiceCode,
+          roomId: room.id,
+          billingMonth: inv.month,
+          roomFee,
+          electricityFee,
+          waterFee,
+          totalAmount,
+          electricityUsage,
+          waterUsage,
+          occupantsCount: br.occupants,
+          dueDate,
+          status: 'PAID' as any,
+          paidAt,
+          approvedById: admin.id,
+          approvedAt: paidAt,
+        },
+      });
+    }
+  }
+  console.log(`✅ Invoices for 6 months created (PAID)`);
+
+  // Một số hóa đơn tháng hiện tại đang PENDING
+  const currentMonth = new Date('2026-04-01');
+  const pendingRooms = ['A301', 'B103', 'B203'];
+  for (const roomCode of pendingRooms) {
+    const room = await prisma.room.findUnique({ where: { code: roomCode } });
+    if (!room) continue;
+    const invoiceCode = `INV-2026-04-${roomCode}-P`;
+    const existing = await prisma.invoice.findFirst({ where: { code: invoiceCode } });
+    if (!existing) {
+      await prisma.invoice.create({
+        data: {
+          code: invoiceCode,
+          roomId: room.id,
+          billingMonth: currentMonth,
+          roomFee: Number(room.pricePerMonth),
+          electricityFee: 315000,
+          waterFee: 30000,
+          totalAmount: Number(room.pricePerMonth) + 345000,
+          electricityUsage: 90,
+          waterUsage: 4,
+          occupantsCount: 1,
+          dueDate: new Date('2026-04-20'),
+          status: 'PENDING' as any,
+        },
+      });
+    }
+  }
+  console.log(`✅ Pending invoices for current month created`);
+
+  // Sự cố bảo trì
+  const ticketDefs = [
+    { code: 'TK-2026-001', roomCode: 'A101', studentId: extraStudents[0].id, title: 'Điều hòa không mát', category: 'AIR_CONDITIONER', priority: 'URGENT', status: 'NEW' },
+    { code: 'TK-2026-002', roomCode: 'B101', studentId: extraStudents[5].id, title: 'Bóng đèn phòng vệ sinh hỏng', category: 'ELECTRICAL', priority: 'NORMAL', status: 'IN_PROGRESS' },
+    { code: 'TK-2026-003', roomCode: 'A201', studentId: extraStudents[3].id, title: 'Vòi nước bị rỉ', category: 'PLUMBING', priority: 'NORMAL', status: 'NEW' },
+    { code: 'TK-2026-004', roomCode: 'B202', studentId: extraStudents[8].id, title: 'Khóa cửa bị hỏng', category: 'DOOR_LOCK', priority: 'URGENT', status: 'IN_PROGRESS' },
+    { code: 'TK-2026-005', roomCode: 'A103', studentId: sv2.id, title: 'Quạt trần kêu to', category: 'ELECTRICAL', priority: 'LOW', status: 'COMPLETED' },
+    { code: 'TK-2026-006', roomCode: 'B102', studentId: sv3.id, title: 'Tủ đồ bị vỡ bản lề', category: 'FURNITURE', priority: 'LOW', status: 'NEW' },
+    { code: 'TK-2026-007', roomCode: 'A202', studentId: sv1.id, title: 'Áp lực nước yếu', category: 'PLUMBING', priority: 'NORMAL', status: 'NEW' },
+  ];
+
+  for (const t of ticketDefs) {
+    const room = await prisma.room.findUnique({ where: { code: t.roomCode } });
+    if (!room) continue;
+    const existing = await prisma.maintenanceTicket.findFirst({ where: { code: t.code } });
+    if (!existing) {
+      await prisma.maintenanceTicket.create({
+        data: {
+          code: t.code,
+          roomId: room.id,
+          reportedById: t.studentId,
+          category: t.category as any,
+          title: t.title,
+          priority: t.priority as any,
+          status: t.status as any,
+          handledById: ['IN_PROGRESS', 'COMPLETED'].includes(t.status) ? staff.id : undefined,
+          handledAt: ['IN_PROGRESS', 'COMPLETED'].includes(t.status) ? new Date() : undefined,
+          completedAt: t.status === 'COMPLETED' ? new Date() : undefined,
+        },
+      });
+    }
+  }
+  console.log(`✅ Maintenance tickets created`);
 
   // ─── 10. Refresh period stats ──────────────────────────────────────────────
 

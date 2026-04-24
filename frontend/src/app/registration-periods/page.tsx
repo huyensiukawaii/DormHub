@@ -450,9 +450,16 @@ export default function RegistrationPeriodsPage() {
                             {period.name}
                             <ChevronRight className="w-3.5 h-3.5 opacity-50" />
                           </button>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {period.code} • {period.academicYear} • HK{period.semester}
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-slate-500">
+                              {period.code} • {period.academicYear} • HK{period.semester}
+                            </p>
+                            {period.autoAssignRoom ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Tự động</span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Ưu tiên</span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
@@ -771,9 +778,46 @@ export default function RegistrationPeriodsPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+              <div className="p-4 bg-slate-50 rounded-lg space-y-4">
                 <h4 className="text-sm font-semibold text-slate-700">Cấu hình</h4>
-                <div className="flex items-center gap-6">
+
+                {/* Approval mode */}
+                <div>
+                  <p className="text-xs font-medium text-slate-600 mb-2">Phương thức duyệt đơn</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, autoAssignRoom: false })}
+                      className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                        !formData.autoAssignRoom
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <span className={`text-sm font-semibold ${!formData.autoAssignRoom ? 'text-emerald-700' : 'text-slate-700'}`}>
+                        Xét duyệt theo ưu tiên
+                      </span>
+                      <span className="text-xs text-slate-500">Admin duyệt thủ công, xếp phòng theo điểm ưu tiên</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, autoAssignRoom: true })}
+                      className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                        formData.autoAssignRoom
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <span className={`text-sm font-semibold ${formData.autoAssignRoom ? 'text-blue-700' : 'text-slate-700'}`}>
+                        Duyệt tự động
+                      </span>
+                      <span className="text-xs text-slate-500">Được duyệt ngay khi nộp đơn, xếp phòng tự động</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Allow room preference — only relevant in priority mode */}
+                {!formData.autoAssignRoom && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -781,18 +825,23 @@ export default function RegistrationPeriodsPage() {
                       onChange={(e) => setFormData({ ...formData, allowRoomPreference: e.target.checked })}
                       className="w-4 h-4 text-emerald-600 rounded border-slate-300"
                     />
-                    <span className="text-sm text-slate-700">Cho phép chọn phòng ưu tiên</span>
+                    <span className="text-sm text-slate-700">Cho phép sinh viên chọn phòng ưu tiên</span>
                   </label>
+                )}
+
+                {/* Allow room preference in auto mode */}
+                {formData.autoAssignRoom && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={formData.autoAssignRoom}
-                      onChange={(e) => setFormData({ ...formData, autoAssignRoom: e.target.checked })}
-                      className="w-4 h-4 text-emerald-600 rounded border-slate-300"
+                      checked={formData.allowRoomPreference}
+                      onChange={(e) => setFormData({ ...formData, allowRoomPreference: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300"
                     />
-                    <span className="text-sm text-slate-700">Tự động xếp phòng</span>
+                    <span className="text-sm text-slate-700">Cho phép chọn phòng ưu tiên <span className="text-slate-400">(hệ thống ưu tiên phòng SV chọn)</span></span>
                   </label>
-                </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Số đơn tối đa mỗi SV</label>
                   <input

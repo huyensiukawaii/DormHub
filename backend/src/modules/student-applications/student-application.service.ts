@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RegistrationPeriodsService } from '../registration-periods/registration-periods.service';
+import { ContractsService } from '../contracts/contracts.service';
+import { MailerService } from '../mailer/mailer.service';
+import { ConfigService } from '@nestjs/config';
 import {
   CreateApplicationDto,
   UpdateApplicationStatusDto,
@@ -38,6 +41,8 @@ const APPLICATION_INCLUDE = {
       name: true,
       academicYear: true,
       semester: true,
+      moveInDate: true,
+      moveOutDate: true,
     },
   },
   roomChoices: {
@@ -64,6 +69,9 @@ export class StudentApplicationsService {
   constructor(
     private prisma: PrismaService,
     private periodsService: RegistrationPeriodsService,
+    private contractsService: ContractsService,
+    private mailerService: MailerService,
+    private configService: ConfigService,
   ) {}
 
   // ========================================
@@ -126,6 +134,7 @@ export class StudentApplicationsService {
         semester: (period as any).semester,
         endDate: period.endDate,
         allowRoomPreference: (period as any).allowRoomPreference,
+        autoAssignRoom: (period as any).autoAssignRoom,
         moveInDate: (period as any).moveInDate,
         moveOutDate: (period as any).moveOutDate,
       },
@@ -254,6 +263,11 @@ export class StudentApplicationsService {
       });
     }
 
+    // Auto-approve if the period is configured for it
+    if ((periodData.period as any).autoAssignRoom) {
+      await this.autoApproveApplication(application.id, studentId, student.gender);
+    }
+
     // Update period stats
     await this.periodsService.refreshStats(periodData.period.id);
 
@@ -264,6 +278,77 @@ export class StudentApplicationsService {
     });
 
     return this.transformToResponse(full);
+  }
+
+  // ========================================
+  // AUTO-APPROVE APPLICATION
+  // ========================================
+  private async autoApproveApplication(applicationId: number, studentId: number, gender: string) {
+    // Gather student's room preferences (already created)
+    const choices = await this.prisma.roomChoice.findMany({
+      where: { applicationId },
+      orderBy: { priority: 'asc' },
+    });
+
+    let selectedRoomId: number | null = null;
+
+    // Try preferred rooms first (in preference order) — must be ACTIVE and have capacity
+    for (const choice of choices) {
+      const room = await this.prisma.room.findUnique({
+        where: { id: choice.roomId },
+        include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
+      });
+      if (room && room.status === 'ACTIVE' && room._count.contracts < room.capacity) {
+        selectedRoomId = room.id;
+        break;
+      }
+    }
+
+    // Fall back to first available room matching gender
+    if (!selectedRoomId) {
+      const anyRoom = await this.prisma.room.findFirst({
+        where: { gender: gender as any, status: 'ACTIVE' },
+        include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
+        orderBy: [{ buildingId: 'asc' }, { code: 'asc' }],
+      });
+      if (anyRoom && anyRoom._count.contracts < anyRoom.capacity) {
+        selectedRoomId = anyRoom.id;
+      }
+    }
+
+    // No room available → leave as PENDING for admin to handle
+    if (!selectedRoomId) return;
+
+    // Approve the application — if contract creation fails, revert to PENDING
+    await this.prisma.registrationApplication.update({
+      where: { id: applicationId },
+      data: {
+        status: 'APPROVED' as any,
+        approvedRoomId: selectedRoomId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    try {
+      await this.contractsService.createFromApplication(
+        { applicationId, roomId: selectedRoomId },
+        null,
+      );
+    } catch {
+      // Revert application to PENDING so admin can handle it
+      await this.prisma.registrationApplication.update({
+        where: { id: applicationId },
+        data: { status: 'PENDING' as any, approvedRoomId: null, reviewedAt: null },
+      });
+      return;
+    }
+
+    // Send approval email (fire-and-forget) — fetch full data needed by sendResultEmail
+    const full = await this.prisma.registrationApplication.findUnique({
+      where: { id: applicationId },
+      include: APPLICATION_INCLUDE as any,
+    });
+    if (full) this.sendResultEmail(full, 'APPROVED').catch(() => {});
   }
 
   // ========================================
@@ -417,8 +502,27 @@ export class StudentApplicationsService {
       include: APPLICATION_INCLUDE as any,
     });
 
+    if (dto.status === 'APPROVED') {
+      try {
+        await this.contractsService.createFromApplication(
+          { applicationId: id, roomId: dto.assignedRoomId! },
+          reviewerId,
+        );
+      } catch (err) {
+        // Revert application to PENDING so admin can retry
+        await this.prisma.registrationApplication.update({
+          where: { id },
+          data: { status: 'PENDING' as any, approvedRoomId: null, reviewedById: null, reviewedAt: null },
+        });
+        throw err;
+      }
+    }
+
     // Update period stats
     await this.periodsService.refreshStats(application.periodId);
+
+    // Gửi email thông báo kết quả (fire-and-forget, không block response)
+    this.sendResultEmail(updated, dto.status).catch(() => {});
 
     return this.transformToResponse(updated);
   }
@@ -603,19 +707,26 @@ export class StudentApplicationsService {
       throw new ForbiddenException('Bạn không có quyền xem đơn này');
     }
 
-    const approvedDocs = await this.prisma.priorityDocument.findMany({
-      where: {
-        studentId: application.studentId,
-        status: 'APPROVED' as any,
-        createdAt: { lte: application.createdAt },
-      },
-      select: { type: true, fileName: true, fileUrl: true },
-    });
+    const [approvedDocs, pendingDocs] = await Promise.all([
+      this.prisma.priorityDocument.findMany({
+        where: {
+          studentId: application.studentId,
+          status: 'APPROVED' as any,
+          createdAt: { lte: application.createdAt },
+        },
+        select: { type: true, fileName: true, fileUrl: true },
+      }),
+      this.prisma.priorityDocument.findMany({
+        where: { studentId: application.studentId, status: 'PENDING' as any },
+        select: { id: true, type: true, fileName: true },
+      }),
+    ]);
 
     return {
       ...application,
       priorityBreakdown: this.buildPriorityBreakdown(application, approvedDocs),
       approvedDocuments: approvedDocs,
+      pendingDocuments: pendingDocs,
     };
   }
 
@@ -681,10 +792,15 @@ export class StudentApplicationsService {
       orderBy: [{ buildingId: 'asc' }, { code: 'asc' }],
     });
 
+    // Với đơn gia hạn muốn ở lại, phòng hiện tại cũng được coi là nguyện vọng
+    const renewalCurrentRoomId =
+      app.type === 'RENEWAL' && (app as any).wantSameRoom ? (app as any).currentRoomId : null;
+
     const roomsWithAvailability = rooms.map((room) => {
       const currentOccupants = room.contracts.length;
       const availableSlots = room.capacity - currentOccupants;
-      const isPreference = app.roomChoices.find((c) => c.roomId === room.id);
+      const choiceMatch = app.roomChoices.find((c) => c.roomId === room.id);
+      const isCurrentRoom = renewalCurrentRoomId === room.id;
 
       return {
         id: room.id,
@@ -698,8 +814,9 @@ export class StudentApplicationsService {
         currentOccupants,
         availableSlots,
         pricePerMonth: room.pricePerMonth,
-        isUserPreference: !!isPreference,
-        preferencePriority: isPreference?.priority || null,
+        isUserPreference: !!choiceMatch || isCurrentRoom,
+        preferencePriority: choiceMatch?.priority ?? (isCurrentRoom ? 0 : null),
+        isCurrentRoom,
       };
     });
 
@@ -744,6 +861,160 @@ export class StudentApplicationsService {
     });
 
     return updated;
+  }
+
+  // ========================================
+  // GET ADMIN DASHBOARD
+  // ========================================
+  async getAdminDashboard() {
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    const [
+      totalRooms,
+      activeContractsCount,
+      pendingApplications,
+      contractsNotCheckedIn,
+      openTickets,
+      buildings,
+      recentApps,
+      recentTickets,
+      paidInvoices,
+    ] = await Promise.all([
+      this.prisma.room.count({ where: { status: 'ACTIVE' as any } }),
+      this.prisma.contract.count({ where: { status: 'ACTIVE' as any } }),
+      this.prisma.registrationApplication.count({ where: { status: 'PENDING' } }),
+      this.prisma.contract.count({ where: { status: 'ACTIVE' as any, checkedInAt: null } }),
+      this.prisma.maintenanceTicket.count({ where: { status: { in: ['NEW', 'IN_PROGRESS'] as any } } }),
+      this.prisma.building.findMany({
+        where: { status: 'ACTIVE' as any },
+        include: {
+          rooms: {
+            where: { status: 'ACTIVE' as any },
+            include: {
+              _count: { select: { contracts: { where: { status: 'ACTIVE' as any } } } },
+            },
+          },
+        },
+        orderBy: { code: 'asc' },
+      }),
+      this.prisma.registrationApplication.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          student: { select: { fullName: true, studentCode: true } },
+          approvedRoom: { select: { code: true } },
+        },
+      }),
+      this.prisma.maintenanceTicket.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: { room: { select: { code: true } } },
+      }),
+      this.prisma.invoice.findMany({
+        where: { status: 'PAID' as any, paidAt: { gte: sixMonthsAgo } },
+        select: { paidAt: true, totalAmount: true },
+      }),
+    ]);
+
+    // Building occupancy
+    let availableRooms = 0;
+    const buildingOccupancy = buildings.map((b) => {
+      let totalCapacity = 0;
+      let occupied = 0;
+      b.rooms.forEach((r) => {
+        totalCapacity += r.capacity;
+        const roomOccupied = (r as any)._count.contracts;
+        occupied += roomOccupied;
+        if (roomOccupied < r.capacity) availableRooms++;
+      });
+      const percentage =
+        totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 1000) / 10 : 0;
+      return { id: b.id, code: b.code, name: b.name, totalCapacity, occupied, percentage };
+    });
+
+    // Revenue by month (last 6 months)
+    const revenueMap = new Map<string, number>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      revenueMap.set(key, 0);
+    }
+    paidInvoices.forEach((inv) => {
+      if (!inv.paidAt) return;
+      const key = `${inv.paidAt.getFullYear()}-${String(inv.paidAt.getMonth() + 1).padStart(2, '0')}`;
+      if (revenueMap.has(key)) {
+        revenueMap.set(key, (revenueMap.get(key) ?? 0) + Number(inv.totalAmount));
+      }
+    });
+    const revenueByMonth = Array.from(revenueMap.entries()).map(([month, amount]) => ({
+      month,
+      amount,
+    }));
+
+    return {
+      stats: {
+        totalRooms,
+        availableRooms,
+        studentsWithActiveContracts: activeContractsCount,
+        pendingApplications,
+        contractsNotCheckedIn,
+        openTickets,
+      },
+      buildingOccupancy,
+      recentApplications: recentApps.map((app) => ({
+        id: app.id,
+        studentName: (app as any).student.fullName,
+        studentCode: (app as any).student.studentCode,
+        roomCode: (app as any).approvedRoom?.code ?? null,
+        status: app.status,
+        createdAt: app.createdAt,
+      })),
+      recentTickets: recentTickets.map((t) => ({
+        id: t.id,
+        title: t.title,
+        roomCode: (t as any).room.code,
+        priority: t.priority,
+        status: t.status,
+        createdAt: t.createdAt,
+      })),
+      revenueByMonth,
+    };
+  }
+
+  // ========================================
+  // HELPER: Send result email
+  // ========================================
+  private async sendResultEmail(app: any, status: string) {
+    const studentWithEmail = await this.prisma.student.findUnique({
+      where: { id: app.studentId },
+      include: { user: { select: { email: true } } },
+    });
+    const email = (studentWithEmail as any)?.user?.email;
+    if (!email) return;
+
+    const loginUrl =
+      this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000') + '/student/contracts';
+
+    if (status === 'APPROVED') {
+      await this.mailerService.sendApplicationApprovedEmail({
+        to: email,
+        studentName: app.student?.fullName ?? '',
+        periodName: app.period?.name ?? '',
+        roomCode: app.approvedRoom?.code ?? '',
+        buildingName: app.approvedRoom?.building?.name ?? '',
+        moveInDate: app.period?.moveInDate ?? null,
+        moveOutDate: app.period?.moveOutDate ?? null,
+        loginUrl,
+      });
+    } else if (status === 'REJECTED') {
+      await this.mailerService.sendApplicationRejectedEmail({
+        to: email,
+        studentName: app.student?.fullName ?? '',
+        periodName: app.period?.name ?? '',
+        rejectionReason: app.rejectionReason ?? 'Không đạt tiêu chí xét duyệt',
+      });
+    }
   }
 
   // ========================================
