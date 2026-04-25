@@ -140,7 +140,6 @@ export default function RegisterKTXPage() {
   };
 
   const canProceed = () => {
-    if (currentStep === 2) return !period?.allowRoomPreference || selectedRooms.length > 0;
     return true;
   };
 
@@ -272,14 +271,7 @@ export default function RegisterKTXPage() {
           <div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Chọn nguyện vọng</h2>
 
-            {!period.allowRoomPreference ? (
-              <div className="text-center py-8">
-                <Home className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500">Đợt đăng ký này không cho phép chọn phòng ưu tiên.</p>
-                <p className="text-sm text-slate-400 mt-1">Phòng sẽ được xếp tự động sau khi duyệt đơn.</p>
-              </div>
-            ) : (
-              <>
+            <>
                 {selectedRooms.length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-sm font-medium text-slate-700 mb-2">NGUYỆN VỌNG</h3>
@@ -341,7 +333,6 @@ export default function RegisterKTXPage() {
                 </div>
                 <p className="text-xs text-slate-500 mt-3">Chọn tối đa 3 phòng theo thứ tự ưu tiên.</p>
               </>
-            )}
           </div>
         )}
 
@@ -355,7 +346,7 @@ export default function RegisterKTXPage() {
                 <p className="text-sm text-slate-800">{applicationType === 'NEW' ? 'Đăng ký mới' : 'Gia hạn'}</p>
               </div>
 
-              {period.allowRoomPreference && selectedRooms.length > 0 && (
+              {selectedRooms.length > 0 && (
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <h3 className="text-sm font-medium text-slate-700 mb-2">Nguyện vọng phòng</h3>
                   <div className="space-y-1">

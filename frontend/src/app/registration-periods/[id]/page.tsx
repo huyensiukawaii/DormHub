@@ -38,9 +38,9 @@ interface RegistrationPeriod {
   moveInDate?: string;
   moveOutDate?: string;
   maxApplicationsPerStudent: number;
-  allowRoomPreference: boolean;
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
+  allowedBuildingIds: number[];
   status: PeriodStatus;
   totalApplications: number;
   approvedCount: number;
@@ -82,9 +82,11 @@ export default function RegistrationPeriodDetailPage() {
   const [stats, setStats] = useState<PeriodStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [buildings, setBuildings] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     fetchData();
+    api.get('/buildings?status=ACTIVE&limit=50').then((res) => setBuildings(res.data?.data ?? res.data ?? [])).catch(() => {});
   }, [periodId]);
 
   const fetchData = async () => {
@@ -304,12 +306,6 @@ export default function RegistrationPeriodDetailPage() {
                 <span className="text-sm text-slate-600">Số đơn tối đa/SV</span>
                 <span className="text-sm font-medium text-slate-800">{period.maxApplicationsPerStudent}</span>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-600">Chọn phòng ưu tiên</span>
-                <span className={`text-sm font-medium ${period.allowRoomPreference ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  {period.allowRoomPreference ? 'Có' : 'Không'}
-                </span>
-              </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-slate-600">Phương thức duyệt</span>
                 {period.autoAssignRoom ? (
@@ -336,6 +332,24 @@ export default function RegistrationPeriodDetailPage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-sm text-slate-600 mb-2">Tòa nhà mở đăng ký:</p>
+              {period.allowedBuildingIds?.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {period.allowedBuildingIds.map((bid) => {
+                    const b = buildings.find((x) => x.id === bid);
+                    return (
+                      <span key={bid} className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded">
+                        {b ? b.name : `Tòa #${bid}`}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span className="text-sm text-emerald-600 font-medium">Tất cả tòa</span>
+              )}
+            </div>
           </div>
 
           {/* Description */}

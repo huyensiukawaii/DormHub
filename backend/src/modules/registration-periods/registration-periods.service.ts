@@ -228,6 +228,7 @@ export class RegistrationPeriodsService {
         allowRoomPreference: dto.allowRoomPreference || false,
         autoAssignRoom: dto.autoAssignRoom || false,
         targetAdmissionYears: dto.targetAdmissionYears ?? [],
+        allowedBuildingIds: dto.allowedBuildingIds ?? [],
         status: dto.status || RegistrationPeriodStatus.DRAFT,
         createdById: userId,
       },
@@ -322,6 +323,7 @@ export class RegistrationPeriodsService {
         allowRoomPreference: dto.allowRoomPreference,
         autoAssignRoom: dto.autoAssignRoom,
         targetAdmissionYears: dto.targetAdmissionYears,
+        allowedBuildingIds: dto.allowedBuildingIds,
         status: dto.status,
       },
       include: {
@@ -614,6 +616,7 @@ export class RegistrationPeriodsService {
       allowRoomPreference: period.allowRoomPreference,
       autoAssignRoom: period.autoAssignRoom,
       targetAdmissionYears: period.targetAdmissionYears as number[] | undefined,
+      allowedBuildingIds: period.allowedBuildingIds as number[],
       status: period.status,
       totalApplications: period.totalApplications,
       approvedCount: period.approvedCount,

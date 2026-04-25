@@ -100,15 +100,25 @@ export class CreateRegistrationPeriodDto {
   @Transform(({ value }) => value === true || value === 'true')
   autoAssignRoom?: boolean;
 
-  @ApiPropertyOptional({ 
-    example: [2024, 2025], 
-    description: 'Các khóa được phép đăng ký (năm nhập học). Để trống = tất cả' 
+  @ApiPropertyOptional({
+    example: [2024, 2025],
+    description: 'Các khóa được phép đăng ký (năm nhập học). Để trống = tất cả'
   })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
   @Type(() => Number)
   targetAdmissionYears?: number[];
+
+  @ApiPropertyOptional({
+    example: [1, 2],
+    description: 'Danh sách ID tòa nhà được mở đăng ký. Để trống = tất cả tòa',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  allowedBuildingIds?: number[];
 
   @ApiPropertyOptional({ enum: RegistrationPeriodStatus, default: 'DRAFT' })
   @IsOptional()
@@ -209,6 +219,7 @@ export class RegistrationPeriodResponseDto {
   allowRoomPreference: boolean;
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
+  allowedBuildingIds: number[];
   status: RegistrationPeriodStatus;
   
   // Stats

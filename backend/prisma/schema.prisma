@@ -256,6 +256,7 @@ model RegistrationPeriod {
   allowRoomPreference       Boolean @default(false) @map("allow_room_preference")
   autoAssignRoom            Boolean @default(false) @map("auto_assign_room")
   targetAdmissionYears      Int[]   @map("target_admission_years")
+  allowedBuildingIds        Int[]   @default([]) @map("allowed_building_ids")
 
   status PeriodStatus @default(DRAFT)
 

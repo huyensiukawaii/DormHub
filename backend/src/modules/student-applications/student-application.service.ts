@@ -101,12 +101,15 @@ export class StudentApplicationsService {
       return null;
     }
 
-    // Get available rooms for this student's gender
+    // Get available rooms for this student's gender, filtered by allowed buildings
+    const allowedBuildingIds = (period as any).allowedBuildingIds as number[];
+    const roomWhere: any = { gender: student.gender, status: 'ACTIVE' };
+    if (allowedBuildingIds?.length > 0) {
+      roomWhere.buildingId = { in: allowedBuildingIds };
+    }
+
     const availableRooms = await this.prisma.room.findMany({
-      where: {
-        gender: student.gender,
-        status: 'ACTIVE',
-      },
+      where: roomWhere,
       include: {
         building: true,
         _count: {
@@ -137,6 +140,7 @@ export class StudentApplicationsService {
         autoAssignRoom: (period as any).autoAssignRoom,
         moveInDate: (period as any).moveInDate,
         moveOutDate: (period as any).moveOutDate,
+        allowedBuildingIds: (period as any).allowedBuildingIds ?? [],
       },
       availableRooms: availableRooms.map((room) => ({
         id: room.id,
@@ -265,7 +269,8 @@ export class StudentApplicationsService {
 
     // Auto-approve if the period is configured for it
     if ((periodData.period as any).autoAssignRoom) {
-      await this.autoApproveApplication(application.id, studentId, student.gender);
+      const allowedBuildingIds = (periodData.period as any).allowedBuildingIds ?? [];
+      await this.autoApproveApplication(application.id, studentId, student.gender, allowedBuildingIds);
     }
 
     // Update period stats
@@ -283,7 +288,7 @@ export class StudentApplicationsService {
   // ========================================
   // AUTO-APPROVE APPLICATION
   // ========================================
-  private async autoApproveApplication(applicationId: number, studentId: number, gender: string) {
+  private async autoApproveApplication(applicationId: number, studentId: number, gender: string, allowedBuildingIds: number[] = []) {
     // Gather student's room preferences (already created)
     const choices = await this.prisma.roomChoice.findMany({
       where: { applicationId },
@@ -309,10 +314,12 @@ export class StudentApplicationsService {
       }
     }
 
-    // Fall back to first available room matching gender
+    // Fall back to first available room matching gender (respecting allowed buildings)
     if (!selectedRoomId) {
+      const fallbackWhere: any = { gender: gender as any, status: 'ACTIVE' };
+      if (allowedBuildingIds.length > 0) fallbackWhere.buildingId = { in: allowedBuildingIds };
       const anyRoom = await this.prisma.room.findFirst({
-        where: { gender: gender as any, status: 'ACTIVE' },
+        where: fallbackWhere,
         include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
         orderBy: [{ buildingId: 'asc' }, { code: 'asc' }],
       });
