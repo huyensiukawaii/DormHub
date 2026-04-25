@@ -12,7 +12,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // ========================================
 // ENUMS

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   OnModuleInit,
 } from '@nestjs/common';
@@ -15,7 +16,6 @@ import {
   TerminateContractDto,
   SetRoomLeaderDto,
   QueryContractDto,
-  ContractStatus,
 } from './dto';
 
 @Injectable()
@@ -152,30 +152,30 @@ export class ContractsService implements OnModuleInit {
     // Validate room
     const room = await this.prisma.room.findUnique({
       where: { id: dto.roomId },
+      include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
     });
     if (!room) throw new NotFoundException('Không tìm thấy phòng');
+    if (room.status !== 'ACTIVE') throw new BadRequestException('Phòng không khả dụng');
+    if (room.gender !== application.student.gender) {
+      throw new BadRequestException(
+        `Phòng ${room.code} dành cho ${room.gender === 'MALE' ? 'nam' : 'nữ'}, không phù hợp với sinh viên`,
+      );
+    }
 
     // Check student doesn't have active contract
     const existingActive = await this.prisma.contract.findFirst({
-      where: {
-        studentId: application.studentId,
-        status: 'ACTIVE',
-      },
+      where: { studentId: application.studentId, status: 'ACTIVE' },
     });
-    if (existingActive) {
-      // Nếu gia hạn thì expire hợp đồng cũ
-      if (application.type === 'RENEWAL') {
-        await this.prisma.contract.update({
-          where: { id: existingActive.id },
-          data: {
-            status: 'EXPIRED',
-            checkedOutAt: new Date(),
-          },
-        });
-      } else {
-        throw new ConflictException(
-          `Sinh viên đang có hợp đồng ACTIVE: ${existingActive.code}`,
-        );
+    if (existingActive && application.type !== 'RENEWAL') {
+      throw new ConflictException(
+        `Sinh viên đang có hợp đồng ACTIVE: ${existingActive.code}`,
+      );
+    }
+
+    // Check room capacity (for non-RENEWAL or if no existing contract to expire)
+    if (!existingActive || application.type !== 'RENEWAL') {
+      if (room._count.contracts >= room.capacity) {
+        throw new BadRequestException(`Phòng ${room.code} đã đầy (${room._count.contracts}/${room.capacity})`);
       }
     }
 
@@ -189,23 +189,33 @@ export class ContractsService implements OnModuleInit {
     // Nếu đợt đã qua hạn (ví dụ admin duyệt trễ), tạo contract với status EXPIRED luôn
     const initialStatus = new Date(endDate) < new Date() ? 'EXPIRED' : 'ACTIVE';
 
-    const contract = await this.prisma.contract.create({
-      data: {
-        code,
-        studentId: application.studentId,
-        roomId: dto.roomId,
-        applicationId: dto.applicationId,
-        startDate,
-        endDate,
-        monthlyRent,
-        isRoomLeader: dto.isRoomLeader || false,
-        status: initialStatus,
-        createdById,
-      },
-      include: {
-        student: { select: { id: true, studentCode: true, fullName: true, gender: true } },
-        room: { include: { building: { select: { id: true, code: true, name: true } } } },
-      },
+    // Wrap RENEWAL expiry + new contract creation in a transaction for atomicity
+    const contract = await this.prisma.$transaction(async (tx) => {
+      if (existingActive && application.type === 'RENEWAL') {
+        await tx.contract.update({
+          where: { id: existingActive.id },
+          data: { status: 'EXPIRED', checkedOutAt: new Date() },
+        });
+      }
+
+      return tx.contract.create({
+        data: {
+          code,
+          studentId: application.studentId,
+          roomId: dto.roomId,
+          applicationId: dto.applicationId,
+          startDate,
+          endDate,
+          monthlyRent,
+          isRoomLeader: dto.isRoomLeader || false,
+          status: initialStatus,
+          createdById,
+        },
+        include: {
+          student: { select: { id: true, studentCode: true, fullName: true, gender: true } },
+          room: { include: { building: { select: { id: true, code: true, name: true } } } },
+        },
+      });
     });
 
     return contract;
@@ -397,7 +407,7 @@ export class ContractsService implements OnModuleInit {
     const contract = await this.findOne(contractId);
 
     if (contract.studentId !== studentId) {
-      throw new BadRequestException('Bạn không có quyền xem hợp đồng này');
+      throw new ForbiddenException('Bạn không có quyền xem hợp đồng này');
     }
 
     return contract;

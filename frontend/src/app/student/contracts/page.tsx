@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import StudentLayout from '@/components/layouts/StudentLayout';
 import { getStoredUser } from '@/lib/auth';
 import {
   FileSignature,
-  Calendar,
   Home,
   CheckCircle,
   Clock,
@@ -15,7 +13,6 @@ import {
   Loader2,
   ChevronRight,
   Crown,
-  CalendarX,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -44,7 +41,6 @@ interface Contract {
 }
 
 export default function StudentContractsPage() {
-  const router = useRouter();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
 

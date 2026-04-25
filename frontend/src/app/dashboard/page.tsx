@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
@@ -72,19 +72,19 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat('vi-VN').format(value) + ' đ';
 }
 
-const statusBadge: Record<string, React.ReactNode> = {
+const statusBadge: Record<string, ReactNode> = {
   PENDING: <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Chờ duyệt</span>,
   APPROVED: <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Đã duyệt</span>,
   REJECTED: <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Từ chối</span>,
 };
 
-const ticketStatusBadge: Record<string, React.ReactNode> = {
+const ticketStatusBadge: Record<string, ReactNode> = {
   NEW: <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Mới</span>,
   IN_PROGRESS: <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Đang xử lý</span>,
   COMPLETED: <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Hoàn thành</span>,
 };
 
-const priorityBadge: Record<string, React.ReactNode> = {
+const priorityBadge: Record<string, ReactNode> = {
   URGENT: <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Khẩn</span>,
   NORMAL: <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Bình thường</span>,
   LOW: <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-full">Thấp</span>,

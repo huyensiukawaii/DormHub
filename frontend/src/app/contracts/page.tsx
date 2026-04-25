@@ -77,8 +77,6 @@ export default function ContractsPage() {
   // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
-    studentId: '',
-    roomId: '',
     startDate: '',
     endDate: '',
     monthlyRent: '',
@@ -86,6 +84,17 @@ export default function ContractsPage() {
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
+
+  // Student lookup
+  const [studentCodeInput, setStudentCodeInput] = useState('');
+  const [studentInfo, setStudentInfo] = useState<{ id: number; fullName: string; studentCode: string; gender: string } | null>(null);
+  const [studentLookupLoading, setStudentLookupLoading] = useState(false);
+  const [studentLookupError, setStudentLookupError] = useState('');
+
+  // Room selection
+  const [selectedRoomId, setSelectedRoomId] = useState('');
+  const [availableRooms, setAvailableRooms] = useState<{ id: number; code: string; building: { name: string }; floor: number; gender: string; capacity: number; occupiedCount: number; availableCount: number; pricePerMonth: number }[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -155,20 +164,65 @@ export default function ContractsPage() {
     }
   };
 
+  const lookupStudent = async () => {
+    const code = studentCodeInput.trim();
+    if (!code) return;
+    setStudentLookupLoading(true);
+    setStudentLookupError('');
+    setStudentInfo(null);
+    setAvailableRooms([]);
+    setSelectedRoomId('');
+    try {
+      const res = await api.get(`/students/code/${code}`);
+      const s = res.data;
+      setStudentInfo({ id: s.id, fullName: s.fullName, studentCode: s.studentCode, gender: s.gender });
+      fetchRoomsForGender(s.gender);
+    } catch {
+      setStudentLookupError('Không tìm thấy sinh viên với MSSV này');
+    } finally {
+      setStudentLookupLoading(false);
+    }
+  };
+
+  const fetchRoomsForGender = async (gender: string) => {
+    setRoomsLoading(true);
+    try {
+      const res = await api.get(`/rooms?gender=${gender}&status=ACTIVE&hasAvailable=true`);
+      setAvailableRooms(res.data);
+    } catch {
+      setAvailableRooms([]);
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
+
+  const resetCreateModal = () => {
+    setCreateForm({ startDate: '', endDate: '', monthlyRent: '', isRoomLeader: false });
+    setStudentCodeInput('');
+    setStudentInfo(null);
+    setStudentLookupError('');
+    setSelectedRoomId('');
+    setAvailableRooms([]);
+    setCreateError('');
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!studentInfo) { setCreateError('Vui lòng tra cứu sinh viên trước'); return; }
+    if (!selectedRoomId) { setCreateError('Vui lòng chọn phòng'); return; }
     setCreateLoading(true);
     setCreateError('');
     try {
       await api.post('/contracts', {
-        studentId: parseInt(createForm.studentId),
-        roomId: parseInt(createForm.roomId),
+        studentId: studentInfo.id,
+        roomId: parseInt(selectedRoomId),
         startDate: createForm.startDate,
         endDate: createForm.endDate,
         monthlyRent: createForm.monthlyRent ? parseFloat(createForm.monthlyRent) : undefined,
         isRoomLeader: createForm.isRoomLeader,
       });
       setShowCreateModal(false);
+      resetCreateModal();
       fetchContracts();
       fetchStats();
     } catch (err: any) {
@@ -192,11 +246,7 @@ export default function ContractsPage() {
           <p className="text-sm text-slate-500 mt-1">Quản lý hợp đồng ký túc xá</p>
         </div>
         <button
-          onClick={() => {
-            setCreateForm({ studentId: '', roomId: '', startDate: '', endDate: '', monthlyRent: '', isRoomLeader: false });
-            setCreateError('');
-            setShowCreateModal(true);
-          }}
+          onClick={() => { resetCreateModal(); setShowCreateModal(true); }}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg"
         >
           <Plus className="w-4 h-4" />
@@ -425,38 +475,109 @@ export default function ContractsPage() {
                   <AlertCircle className="w-4 h-4" /> {createError}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Student ID <span className="text-red-500">*</span></label>
-                  <input type="number" value={createForm.studentId} onChange={(e) => setCreateForm({ ...createForm, studentId: e.target.value })} className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg" required />
+
+              {/* Student lookup */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  MSSV <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="VD: 20225726"
+                    value={studentCodeInput}
+                    onChange={(e) => { setStudentCodeInput(e.target.value); setStudentInfo(null); setStudentLookupError(''); setSelectedRoomId(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), lookupStudent())}
+                    className="flex-1 px-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={lookupStudent}
+                    disabled={studentLookupLoading || !studentCodeInput.trim()}
+                    className="px-4 py-2.5 text-sm font-medium text-white bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 rounded-lg flex items-center gap-1.5"
+                  >
+                    {studentLookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Tra cứu
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Room ID <span className="text-red-500">*</span></label>
-                  <input type="number" value={createForm.roomId} onChange={(e) => setCreateForm({ ...createForm, roomId: e.target.value })} className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg" required />
-                </div>
+                {studentLookupError && (
+                  <p className="text-xs text-red-500 mt-1">{studentLookupError}</p>
+                )}
+                {studentInfo && (
+                  <div className="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-800">{studentInfo.fullName}</p>
+                      <p className="text-xs text-emerald-600">{studentInfo.studentCode}</p>
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${studentInfo.gender === 'MALE' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
+                      {studentInfo.gender === 'MALE' ? 'Nam' : 'Nữ'}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {/* Room selection */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Phòng <span className="text-red-500">*</span>
+                  {studentInfo && <span className="ml-1 text-xs text-slate-400 font-normal">(chỉ hiển thị phòng {studentInfo.gender === 'MALE' ? 'nam' : 'nữ'} còn chỗ)</span>}
+                </label>
+                {!studentInfo ? (
+                  <div className="w-full px-4 py-2.5 text-sm text-slate-400 border border-slate-200 rounded-lg bg-slate-50">
+                    Tra cứu sinh viên trước để chọn phòng
+                  </div>
+                ) : roomsLoading ? (
+                  <div className="w-full px-4 py-2.5 text-sm text-slate-500 border border-slate-200 rounded-lg flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Đang tải danh sách phòng...
+                  </div>
+                ) : availableRooms.length === 0 ? (
+                  <div className="w-full px-4 py-2.5 text-sm text-amber-600 border border-amber-200 rounded-lg bg-amber-50">
+                    Không có phòng nào còn chỗ phù hợp
+                  </div>
+                ) : (
+                  <select
+                    value={selectedRoomId}
+                    onChange={(e) => setSelectedRoomId(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    required
+                  >
+                    <option value="">-- Chọn phòng --</option>
+                    {availableRooms.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.code} – {room.building.name} (Tầng {room.floor}) • {room.availableCount}/{room.capacity} chỗ trống • {new Intl.NumberFormat('vi-VN').format(Number(room.pricePerMonth))}đ/tháng
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Dates */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Ngày bắt đầu <span className="text-red-500">*</span></label>
-                  <input type="date" value={createForm.startDate} onChange={(e) => setCreateForm({ ...createForm, startDate: e.target.value })} className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg" required />
+                  <input type="date" value={createForm.startDate} onChange={(e) => setCreateForm({ ...createForm, startDate: e.target.value })} className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Ngày kết thúc <span className="text-red-500">*</span></label>
-                  <input type="date" value={createForm.endDate} onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })} className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg" required />
+                  <input type="date" value={createForm.endDate} onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })} className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" required />
                 </div>
               </div>
+
+              {/* Monthly rent */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tiền phòng/tháng (để trống = lấy từ phòng)</label>
-                <input type="number" value={createForm.monthlyRent} onChange={(e) => setCreateForm({ ...createForm, monthlyRent: e.target.value })} placeholder="VD: 300000" className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg" />
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tiền phòng/tháng <span className="text-xs text-slate-400 font-normal">(để trống = lấy từ phòng)</span></label>
+                <input type="number" value={createForm.monthlyRent} onChange={(e) => setCreateForm({ ...createForm, monthlyRent: e.target.value })} placeholder="VD: 300000" className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
               </div>
+
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={createForm.isRoomLeader} onChange={(e) => setCreateForm({ ...createForm, isRoomLeader: e.target.checked })} className="w-4 h-4 text-emerald-600 rounded" />
                 <span className="text-sm text-slate-700">Là trưởng phòng</span>
               </label>
+
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Hủy</button>
-                <button type="submit" disabled={createLoading} className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 rounded-lg flex items-center justify-center gap-2">
-                  {createLoading && <Loader2 className="w-4 h-4 animate-spin" />} Tạo
+                <button type="button" onClick={() => { setShowCreateModal(false); resetCreateModal(); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Hủy</button>
+                <button type="submit" disabled={createLoading || !studentInfo || !selectedRoomId} className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 rounded-lg flex items-center justify-center gap-2">
+                  {createLoading && <Loader2 className="w-4 h-4 animate-spin" />} Tạo hợp đồng
                 </button>
               </div>
             </form>

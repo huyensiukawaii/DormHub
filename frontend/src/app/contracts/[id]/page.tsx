@@ -7,10 +7,6 @@ import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   ArrowLeft,
   Calendar,
-  Home,
-  User,
-  CheckCircle,
-  Clock,
   XCircle,
   AlertCircle,
   Loader2,
@@ -20,7 +16,6 @@ import {
   Phone,
   Mail,
   GraduationCap,
-  Users,
   AlertTriangle,
   FileText,
   CalendarX,

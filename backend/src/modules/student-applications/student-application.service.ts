@@ -292,12 +292,17 @@ export class StudentApplicationsService {
 
     let selectedRoomId: number | null = null;
 
-    // Try preferred rooms first (in preference order) — must be ACTIVE and have capacity
+    // Batch-fetch all preferred rooms to avoid N+1
+    const preferredRoomIds = choices.map((c) => c.roomId);
+    const preferredRooms = await this.prisma.room.findMany({
+      where: { id: { in: preferredRoomIds } },
+      include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
+    });
+    const roomById = new Map(preferredRooms.map((r) => [r.id, r]));
+
+    // Try preferred rooms in priority order — must be ACTIVE and have capacity
     for (const choice of choices) {
-      const room = await this.prisma.room.findUnique({
-        where: { id: choice.roomId },
-        include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
-      });
+      const room = roomById.get(choice.roomId);
       if (room && room.status === 'ACTIVE' && room._count.contracts < room.capacity) {
         selectedRoomId = room.id;
         break;
