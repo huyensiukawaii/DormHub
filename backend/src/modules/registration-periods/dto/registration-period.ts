@@ -120,6 +120,15 @@ export class CreateRegistrationPeriodDto {
   @Type(() => Number)
   allowedBuildingIds?: number[];
 
+  @ApiPropertyOptional({
+    enum: ['ALL', 'NEW_ONLY', 'RENEWAL_ONLY'],
+    default: 'ALL',
+    description: 'ALL = tất cả, NEW_ONLY = chỉ đăng ký mới, RENEWAL_ONLY = chỉ gia hạn',
+  })
+  @IsOptional()
+  @IsString()
+  allowedTypes?: string;
+
   @ApiPropertyOptional({ enum: RegistrationPeriodStatus, default: 'DRAFT' })
   @IsOptional()
   @IsEnum(RegistrationPeriodStatus)
@@ -220,6 +229,7 @@ export class RegistrationPeriodResponseDto {
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
   allowedBuildingIds: number[];
+  allowedTypes: string;
   status: RegistrationPeriodStatus;
   
   // Stats

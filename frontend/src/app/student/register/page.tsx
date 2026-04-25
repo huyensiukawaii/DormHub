@@ -37,7 +37,7 @@ interface PeriodInfo {
   code: string;
   name: string;
   endDate: string;
-  allowRoomPreference: boolean;
+  allowedTypes: string;
 }
 
 export default function RegisterKTXPage() {
@@ -86,8 +86,10 @@ export default function RegisterKTXPage() {
         code: p.code,
         name: p.name,
         endDate: p.endDate,
-        allowRoomPreference: p.allowRoomPreference,
+        allowedTypes: p.allowedTypes ?? 'ALL',
       });
+      if (p.allowedTypes === 'NEW_ONLY') setApplicationType('NEW');
+      if (p.allowedTypes === 'RENEWAL_ONLY') setApplicationType('RENEWAL');
       setAvailableRooms(rooms);
       setHasActiveContract(!!res.data.hasActiveContract);
     } catch (err) {
@@ -225,43 +227,56 @@ export default function RegisterKTXPage() {
         {currentStep === 1 && (
           <div>
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Chọn loại đăng ký</h2>
+            {period.allowedTypes !== 'ALL' && (
+              <div className="flex items-center gap-2 p-3 mb-4 bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {period.allowedTypes === 'NEW_ONLY'
+                  ? 'Đợt này chỉ nhận đăng ký mới.'
+                  : 'Đợt này chỉ nhận đơn gia hạn.'}
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                onClick={() => setApplicationType('NEW')}
-                className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  applicationType === 'NEW'
-                    ? 'border-amber-500 bg-amber-50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
-                  applicationType === 'NEW' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  <FileText className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-slate-800 mb-1">Đăng ký mới</h3>
-                <p className="text-xs text-slate-500">Dành cho sinh viên chưa ở KTX</p>
-              </button>
+              {period.allowedTypes !== 'RENEWAL_ONLY' && (
+                <button
+                  onClick={() => setApplicationType('NEW')}
+                  disabled={period.allowedTypes === 'RENEWAL_ONLY'}
+                  className={`p-5 rounded-xl border-2 text-left transition-all ${
+                    applicationType === 'NEW'
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
+                    applicationType === 'NEW' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-semibold text-slate-800 mb-1">Đăng ký mới</h3>
+                  <p className="text-xs text-slate-500">Dành cho sinh viên chưa ở KTX</p>
+                </button>
+              )}
 
-              <button
-                onClick={() => setApplicationType('RENEWAL')}
-                disabled={!hasActiveContract}
-                className={`p-5 rounded-xl border-2 text-left transition-all ${
-                  applicationType === 'RENEWAL'
-                    ? 'border-amber-500 bg-amber-50'
-                    : hasActiveContract
-                    ? 'border-slate-200 hover:border-slate-300'
-                    : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
-                  applicationType === 'RENEWAL' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  <RefreshCw className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-slate-800 mb-1">Gia hạn</h3>
-                <p className="text-xs text-slate-500">Dành cho sinh viên đang ở KTX</p>
-              </button>
+              {period.allowedTypes !== 'NEW_ONLY' && (
+                <button
+                  onClick={() => setApplicationType('RENEWAL')}
+                  disabled={!hasActiveContract}
+                  className={`p-5 rounded-xl border-2 text-left transition-all ${
+                    applicationType === 'RENEWAL'
+                      ? 'border-amber-500 bg-amber-50'
+                      : hasActiveContract
+                      ? 'border-slate-200 hover:border-slate-300'
+                      : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
+                    applicationType === 'RENEWAL' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    <RefreshCw className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-semibold text-slate-800 mb-1">Gia hạn</h3>
+                  <p className="text-xs text-slate-500">Dành cho sinh viên đang ở KTX</p>
+                </button>
+              )}
             </div>
           </div>
         )}

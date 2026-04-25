@@ -38,9 +38,10 @@ interface RegistrationPeriod {
   moveInDate?: string;
   moveOutDate?: string;
   maxApplicationsPerStudent: number;
-  allowRoomPreference: boolean;
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
+  allowedBuildingIds: number[];
+  allowedTypes: string;
   status: PeriodStatus;
   totalApplications: number;
   approvedCount: number;
@@ -123,6 +124,7 @@ export default function RegistrationPeriodsPage() {
     autoAssignRoom: false,
     targetAdmissionYears: [] as number[],
     allowedBuildingIds: [] as number[],
+    allowedTypes: 'ALL',
     status: 'DRAFT' as PeriodStatus,
   });
 
@@ -214,6 +216,7 @@ export default function RegistrationPeriodsPage() {
       autoAssignRoom: false,
       targetAdmissionYears: [],
       allowedBuildingIds: [],
+      allowedTypes: 'ALL',
       status: 'DRAFT',
     });
     setFormError('');
@@ -237,7 +240,8 @@ export default function RegistrationPeriodsPage() {
       allowRoomPreference: period.allowRoomPreference,
       autoAssignRoom: period.autoAssignRoom,
       targetAdmissionYears: period.targetAdmissionYears || [],
-      allowedBuildingIds: (period as any).allowedBuildingIds || [],
+      allowedBuildingIds: period.allowedBuildingIds || [],
+      allowedTypes: period.allowedTypes || 'ALL',
       status: period.status,
     });
     setFormError('');
@@ -472,9 +476,9 @@ export default function RegistrationPeriodsPage() {
                             ) : (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Ưu tiên</span>
                             )}
-                            {(period as any).allowedBuildingIds?.length > 0 && (
+                            {period.allowedBuildingIds?.length > 0 && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                                {(period as any).allowedBuildingIds.length} tòa
+                                {period.allowedBuildingIds.length} tòa
                               </span>
                             )}
                           </div>
@@ -857,6 +861,34 @@ export default function RegistrationPeriodsPage() {
                     max={5}
                     className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg"
                   />
+                </div>
+
+                {/* Application type restriction */}
+                <div>
+                  <p className="text-xs font-medium text-slate-600 mb-2">Loại đơn được nhận</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: 'ALL', label: 'Tất cả', desc: 'Cả mới & gia hạn' },
+                      { value: 'NEW_ONLY', label: 'Chỉ mới', desc: 'Không nhận gia hạn' },
+                      { value: 'RENEWAL_ONLY', label: 'Chỉ gia hạn', desc: 'Không nhận mới' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, allowedTypes: opt.value })}
+                        className={`flex flex-col items-start gap-0.5 p-3 rounded-lg border-2 text-left transition-colors ${
+                          formData.allowedTypes === opt.value
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <span className={`text-sm font-semibold ${formData.allowedTypes === opt.value ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          {opt.label}
+                        </span>
+                        <span className="text-xs text-slate-500">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Building filter */}

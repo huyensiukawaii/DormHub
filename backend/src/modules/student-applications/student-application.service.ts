@@ -141,6 +141,7 @@ export class StudentApplicationsService {
         moveInDate: (period as any).moveInDate,
         moveOutDate: (period as any).moveOutDate,
         allowedBuildingIds: (period as any).allowedBuildingIds ?? [],
+        allowedTypes: (period as any).allowedTypes ?? 'ALL',
       },
       availableRooms: availableRooms.map((room) => ({
         id: room.id,
@@ -196,6 +197,15 @@ export class StudentApplicationsService {
       throw new ConflictException('Bạn đã nộp đơn đăng ký cho đợt này rồi');
     }
 
+    // Validate application type against period restriction
+    const allowedTypes = (periodData.period as any).allowedTypes ?? 'ALL';
+    if (allowedTypes === 'NEW_ONLY' && dto.applicationType === ApplicationType.RENEWAL) {
+      throw new BadRequestException('Đợt đăng ký này chỉ dành cho đăng ký mới, không nhận đơn gia hạn');
+    }
+    if (allowedTypes === 'RENEWAL_ONLY' && dto.applicationType === ApplicationType.NEW) {
+      throw new BadRequestException('Đợt đăng ký này chỉ dành cho gia hạn, không nhận đơn đăng ký mới');
+    }
+
     // Calculate priority score from approved priority documents
     const approvedDocs = await this.prisma.priorityDocument.findMany({
       where: { studentId, status: 'APPROVED' as any },
@@ -227,9 +237,6 @@ export class StudentApplicationsService {
 
     // Validate room preferences
     if (dto.roomPreferences && dto.roomPreferences.length > 0) {
-      if (!periodData.period.allowRoomPreference) {
-        throw new BadRequestException('Đợt đăng ký này không cho phép chọn phòng ưu tiên');
-      }
       const availableRoomIds = periodData.availableRooms.map((r) => r.id);
       for (const pref of dto.roomPreferences) {
         if (!availableRoomIds.includes(pref.roomId)) {

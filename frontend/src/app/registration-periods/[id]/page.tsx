@@ -41,6 +41,7 @@ interface RegistrationPeriod {
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
   allowedBuildingIds: number[];
+  allowedTypes: string;
   status: PeriodStatus;
   totalApplications: number;
   approvedCount: number;
@@ -306,6 +307,16 @@ export default function RegistrationPeriodDetailPage() {
                 <span className="text-sm text-slate-600">Số đơn tối đa/SV</span>
                 <span className="text-sm font-medium text-slate-800">{period.maxApplicationsPerStudent}</span>
               </div>
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span className="text-sm text-slate-600">Loại đơn nhận</span>
+                {period.allowedTypes === 'NEW_ONLY' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Chỉ đăng ký mới</span>
+                ) : period.allowedTypes === 'RENEWAL_ONLY' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">Chỉ gia hạn</span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Tất cả</span>
+                )}
+              </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-slate-600">Phương thức duyệt</span>
                 {period.autoAssignRoom ? (
@@ -484,7 +495,7 @@ export default function RegistrationPeriodDetailPage() {
                     Số đơn theo ngày (14 ngày gần nhất)
                   </h3>
                   <div className="h-40 flex items-end gap-1">
-                    {stats.dailyApplications.map((item, index) => {
+                    {stats.dailyApplications.map((item) => {
                       const maxCount = Math.max(...stats.dailyApplications.map((i) => i.count));
                       const height = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
                       return (
