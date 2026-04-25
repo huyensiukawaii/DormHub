@@ -172,11 +172,12 @@ export class ContractsService implements OnModuleInit {
       );
     }
 
-    // Check room capacity (for non-RENEWAL or if no existing contract to expire)
-    if (!existingActive || application.type !== 'RENEWAL') {
-      if (room._count.contracts >= room.capacity) {
-        throw new BadRequestException(`Phòng ${room.code} đã đầy (${room._count.contracts}/${room.capacity})`);
-      }
+    // Check room capacity
+    // For RENEWAL staying in the same room, skip the check: the old contract will be expired
+    // in the same transaction, so one slot frees up. For all other cases enforce capacity.
+    const isRenewalSameRoom = application.type === 'RENEWAL' && existingActive?.roomId === dto.roomId;
+    if (!isRenewalSameRoom && room._count.contracts >= room.capacity) {
+      throw new BadRequestException(`Phòng ${room.code} đã đầy (${room._count.contracts}/${room.capacity})`);
     }
 
     // Lấy thời gian từ đợt đăng ký

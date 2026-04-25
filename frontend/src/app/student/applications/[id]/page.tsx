@@ -258,13 +258,14 @@ export default function StudentApplicationDetailPage() {
           </div>
         </div>
 
-        {application.status === 'PENDING' && (
+        {(application.status === 'PENDING' ||
+          (application.status === 'APPROVED' && new Date(application.period.endDate) > new Date())) && (
           <button
             onClick={() => setShowCancelModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
-            Hủy đơn
+            Hủy đăng ký
           </button>
         )}
       </div>
@@ -630,9 +631,13 @@ export default function StudentApplicationDetailPage() {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
                 <Trash2 className="w-6 h-6 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Hủy đơn đăng ký?</h3>
+              <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                {application.status === 'APPROVED' ? 'Hủy đặt phòng?' : 'Hủy đơn đăng ký?'}
+              </h3>
               <p className="text-sm text-slate-500 mb-6">
-                Đơn đã hủy không thể khôi phục. Bạn sẽ cần nộp đơn mới nếu đổi ý.
+                {application.status === 'APPROVED'
+                  ? 'Phòng đã đặt sẽ được giải phóng. Bạn có thể đăng ký lại phòng khác trước khi đợt kết thúc.'
+                  : 'Đơn đã hủy không thể khôi phục. Bạn sẽ cần nộp đơn mới nếu đổi ý.'}
               </p>
               <div className="flex gap-3 w-full">
                 <button

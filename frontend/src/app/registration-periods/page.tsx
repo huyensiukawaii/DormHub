@@ -237,7 +237,7 @@ export default function RegistrationPeriodsPage() {
       moveInDate: period.moveInDate?.split('T')[0] || '',
       moveOutDate: period.moveOutDate?.split('T')[0] || '',
       maxApplicationsPerStudent: period.maxApplicationsPerStudent,
-      allowRoomPreference: period.allowRoomPreference,
+      allowRoomPreference: true,
       autoAssignRoom: period.autoAssignRoom,
       targetAdmissionYears: period.targetAdmissionYears || [],
       allowedBuildingIds: period.allowedBuildingIds || [],
@@ -829,7 +829,7 @@ export default function RegistrationPeriodsPage() {
                         <button
                           type="button"
                           disabled={locked}
-                          onClick={() => !locked && setFormData({ ...formData, autoAssignRoom: true })}
+                          onClick={() => !locked && setFormData({ ...formData, autoAssignRoom: true, maxApplicationsPerStudent: 1 })}
                           className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 text-left transition-colors ${
                             formData.autoAssignRoom
                               ? 'border-blue-500 bg-blue-50'
@@ -851,17 +851,19 @@ export default function RegistrationPeriodsPage() {
                   );
                 })()}
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Số đơn tối đa mỗi SV</label>
-                  <input
-                    type="number"
-                    value={formData.maxApplicationsPerStudent}
-                    onChange={(e) => setFormData({ ...formData, maxApplicationsPerStudent: parseInt(e.target.value) || 1 })}
-                    min={1}
-                    max={5}
-                    className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg"
-                  />
-                </div>
+                {!formData.autoAssignRoom && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Số nguyện vọng tối đa mỗi SV</label>
+                    <input
+                      type="number"
+                      value={formData.maxApplicationsPerStudent}
+                      onChange={(e) => setFormData({ ...formData, maxApplicationsPerStudent: parseInt(e.target.value) || 1 })}
+                      min={1}
+                      max={5}
+                      className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg"
+                    />
+                  </div>
+                )}
 
                 {/* Application type restriction */}
                 <div>

@@ -38,6 +38,7 @@ interface PeriodInfo {
   name: string;
   endDate: string;
   allowedTypes: string;
+  autoAssignRoom: boolean;
 }
 
 export default function RegisterKTXPage() {
@@ -50,6 +51,7 @@ export default function RegisterKTXPage() {
   const [period, setPeriod] = useState<PeriodInfo | null>(null);
   const [noPeriod, setNoPeriod] = useState(false);
   const [hasActiveContract, setHasActiveContract] = useState(false);
+  const [existingApplicationId, setExistingApplicationId] = useState<number | null>(null);
 
   const [applicationType, setApplicationType] = useState<ApplicationType>('NEW');
 
@@ -75,18 +77,29 @@ export default function RegisterKTXPage() {
         return;
       }
 
-      if (res.data.hasExistingApplication) {
+      const { period: p, availableRooms: rooms } = res.data;
+      const isAutoAssign = !!p.autoAssignRoom;
+
+      // For manual-review periods: redirect if already applied
+      if (res.data.hasExistingApplication && !isAutoAssign) {
         router.push('/student/applications');
         return;
       }
 
-      const { period: p, availableRooms: rooms } = res.data;
+      // For auto-assign periods: allow changing room — pre-select existing choice if any
+      if (res.data.hasExistingApplication && isAutoAssign) {
+        setExistingApplicationId(res.data.existingApplicationId ?? null);
+        const existingRoomId = res.data.existingApprovedRoomId;
+        if (existingRoomId) setSelectedRooms([existingRoomId]);
+      }
+
       setPeriod({
         id: p.id,
         code: p.code,
         name: p.name,
         endDate: p.endDate,
         allowedTypes: p.allowedTypes ?? 'ALL',
+        autoAssignRoom: isAutoAssign,
       });
       if (p.allowedTypes === 'NEW_ONLY') setApplicationType('NEW');
       if (p.allowedTypes === 'RENEWAL_ONLY') setApplicationType('RENEWAL');
@@ -102,6 +115,9 @@ export default function RegisterKTXPage() {
   const handleRoomSelect = (roomId: number) => {
     if (selectedRooms.includes(roomId)) {
       setSelectedRooms(selectedRooms.filter((id) => id !== roomId));
+    } else if (period?.autoAssignRoom) {
+      // Auto-assign: replace selection (only 1 room)
+      setSelectedRooms([roomId]);
     } else if (selectedRooms.length < 3) {
       setSelectedRooms([...selectedRooms, roomId]);
     }
@@ -282,40 +298,64 @@ export default function RegisterKTXPage() {
         )}
 
         {/* Step 2: Room Preferences */}
-        {currentStep === 2 && (
+        {currentStep === 2 && period && (
           <div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Chọn nguyện vọng</h2>
+            <h2 className="text-lg font-semibold text-slate-800 mb-1">
+              {period.autoAssignRoom ? 'Chọn phòng' : 'Chọn nguyện vọng'}
+            </h2>
+            {period.autoAssignRoom ? (
+              <p className="text-xs text-slate-500 mb-4">
+                Chọn 1 phòng còn chỗ. Hợp đồng sẽ được tạo sau khi đợt kết thúc.
+                {existingApplicationId && ' Bạn có thể đổi lựa chọn bất kỳ lúc nào trước deadline.'}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 mb-4">Chọn tối đa 3 phòng theo thứ tự ưu tiên.</p>
+            )}
 
-            <>
-                {selectedRooms.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-slate-700 mb-2">NGUYỆN VỌNG</h3>
-                    <div className="space-y-2">
-                      {selectedRooms.map((roomId, index) => {
-                        const room = availableRooms.find((r) => r.id === roomId);
-                        if (!room) return null;
-                        return (
-                          <div key={roomId} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                            <span className="w-6 h-6 bg-amber-500 text-white text-sm font-semibold rounded-full flex items-center justify-center">
-                              {index + 1}
-                            </span>
-                            <div className="flex-1">
-                              <span className="text-sm font-medium text-slate-800">
-                                {room.code} - {room.buildingName}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
+            {/* Selected room(s) */}
+            {selectedRooms.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-slate-700 mb-2">
+                  {period.autoAssignRoom ? 'PHÒNG ĐÃ CHỌN' : 'NGUYỆN VỌNG'}
+                </h3>
+                <div className="space-y-2">
+                  {selectedRooms.map((roomId, index) => {
+                    const room = availableRooms.find((r) => r.id === roomId);
+                    if (!room) return null;
+                    return (
+                      <div key={roomId} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        {!period.autoAssignRoom && (
+                          <span className="w-6 h-6 bg-amber-500 text-white text-sm font-semibold rounded-full flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                        )}
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-slate-800">
+                            {room.code} - {room.buildingName}
+                          </span>
+                          <p className="text-xs text-slate-500">
+                            Tầng {room.floor} • {room.roomType === 'AIR_CONDITIONED' ? 'Điều hòa' : 'Thường'} • Còn {room.availableSlots}/{room.capacity} chỗ • {formatCurrency(room.pricePerMonth)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {!period.autoAssignRoom && (
+                            <>
                               <button onClick={() => moveRoomUp(index)} disabled={index === 0} className="p-1 hover:bg-amber-100 rounded disabled:opacity-30">↑</button>
                               <button onClick={() => moveRoomDown(index)} disabled={index === selectedRooms.length - 1} className="p-1 hover:bg-amber-100 rounded disabled:opacity-30">↓</button>
-                              <button onClick={() => handleRoomSelect(roomId)} className="p-1 hover:bg-red-100 text-red-500 rounded ml-2">✕</button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                            </>
+                          )}
+                          <button onClick={() => handleRoomSelect(roomId)} className="p-1 hover:bg-red-100 text-red-500 rounded ml-1">✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
+            {/* Available rooms list */}
+            {(!period.autoAssignRoom || selectedRooms.length === 0) && (
+              <>
                 <h3 className="text-sm font-medium text-slate-700 mb-2">
                   PHÒNG CÒN TRỐNG ({availableRooms.filter((r) => !selectedRooms.includes(r.id) && r.availableSlots > 0).length})
                 </h3>
@@ -326,7 +366,7 @@ export default function RegisterKTXPage() {
                       <button
                         key={room.id}
                         onClick={() => handleRoomSelect(room.id)}
-                        disabled={selectedRooms.length >= 3}
+                        disabled={!period.autoAssignRoom && selectedRooms.length >= 3}
                         className="w-full flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:border-amber-300 hover:bg-amber-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <div className="flex items-center gap-3">
@@ -346,8 +386,29 @@ export default function RegisterKTXPage() {
                       </button>
                     ))}
                 </div>
-                <p className="text-xs text-slate-500 mt-3">Chọn tối đa 3 phòng theo thứ tự ưu tiên.</p>
+                {availableRooms.filter((r) => r.availableSlots === 0).length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-xs font-medium text-slate-500">ĐÃ HẾT CHỖ</p>
+                    {availableRooms
+                      .filter((r) => r.availableSlots === 0)
+                      .map((room) => (
+                        <div key={room.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-lg opacity-50">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                              <Home className="w-5 h-5 text-slate-400" />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-sm font-medium text-slate-600">{room.code} - {room.buildingName}</p>
+                              <p className="text-xs text-red-500">Đã hết chỗ ({room.capacity}/{room.capacity})</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-slate-400">{formatCurrency(room.pricePerMonth)}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </>
+            )}
           </div>
         )}
 
@@ -382,11 +443,19 @@ export default function RegisterKTXPage() {
                   <CheckCircle className="w-5 h-5 text-amber-600 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-amber-800">Lưu ý quan trọng</p>
-                    <ul className="text-xs text-amber-700 mt-1 space-y-1 list-disc list-inside">
-                      <li>Đơn sẽ được xét duyệt theo điểm ưu tiên</li>
-                      <li>Kết quả sẽ được thông báo qua email</li>
-                      <li>Sau khi được duyệt, bạn cần xác nhận nhận phòng trong 3 ngày</li>
-                    </ul>
+                    {period?.autoAssignRoom ? (
+                      <ul className="text-xs text-amber-700 mt-1 space-y-1 list-disc list-inside">
+                        <li>Phòng được giữ chỗ ngay sau khi nộp đơn</li>
+                        <li>Bạn có thể đổi phòng bất kỳ lúc nào trước khi đợt kết thúc</li>
+                        <li>Hợp đồng sẽ được tạo tự động sau khi đợt đóng đăng ký</li>
+                      </ul>
+                    ) : (
+                      <ul className="text-xs text-amber-700 mt-1 space-y-1 list-disc list-inside">
+                        <li>Đơn sẽ được xét duyệt theo điểm ưu tiên</li>
+                        <li>Kết quả sẽ được thông báo qua email</li>
+                        <li>Sau khi được duyệt, bạn cần xác nhận nhận phòng trong 3 ngày</li>
+                      </ul>
+                    )}
                   </div>
                 </div>
               </div>
@@ -424,7 +493,7 @@ export default function RegisterKTXPage() {
               className="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-sm font-medium rounded-lg transition-colors"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Gửi đơn đăng ký
+              {existingApplicationId ? 'Đổi phòng' : 'Gửi đơn đăng ký'}
             </button>
           )}
         </div>
