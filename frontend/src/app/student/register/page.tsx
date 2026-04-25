@@ -158,6 +158,10 @@ export default function RegisterKTXPage() {
   };
 
   const canProceed = () => {
+    if (currentStep === 2) {
+      if (period?.autoAssignRoom) return selectedRooms.length === 1;
+      return selectedRooms.length > 0;
+    }
     return true;
   };
 

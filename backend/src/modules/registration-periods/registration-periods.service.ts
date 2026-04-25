@@ -602,40 +602,65 @@ export class RegistrationPeriodsService {
     const year = new Date().getFullYear();
     const prefix = `HD-${year}-`;
 
-    // Generate sequential codes starting from the current max
-    const lastContract = await this.prisma.contract.findFirst({
-      where: { code: { startsWith: prefix } },
-      orderBy: { code: 'desc' },
-    });
-    let nextNumber = lastContract
-      ? (parseInt(lastContract.code.replace(prefix, ''), 10) || 0) + 1
-      : 1;
+    let createdCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
 
     for (const app of applications) {
       if (!app.approvedRoomId) continue;
       try {
-        const code = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
-        nextNumber++;
-        await this.prisma.contract.create({
-          data: {
-            code,
-            studentId: app.studentId,
-            roomId: app.approvedRoomId,
-            applicationId: app.id,
-            startDate,
-            endDate,
-            monthlyRent: Number((app as any).approvedRoom.pricePerMonth),
-            isRoomLeader: false,
-            status: initialStatus,
-            createdById: null,
-          },
+        await this.prisma.$transaction(async (tx) => {
+          // Idempotency: skip if a contract was already created for this application
+          const existing = await tx.contract.findFirst({
+            where: { applicationId: app.id },
+            select: { id: true },
+          });
+          if (existing) { skippedCount++; return; }
+
+          // Generate code inside the transaction to avoid duplicates with concurrent manual creation
+          const lastContract = await tx.contract.findFirst({
+            where: { code: { startsWith: prefix } },
+            orderBy: { code: 'desc' },
+            select: { code: true },
+          });
+          const nextNum = lastContract
+            ? (parseInt(lastContract.code.replace(prefix, ''), 10) || 0) + 1
+            : 1;
+          const code = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+
+          // For RENEWAL (or any case creating an ACTIVE contract): expire previous ACTIVE contracts
+          if (initialStatus === 'ACTIVE') {
+            await tx.contract.updateMany({
+              where: { studentId: app.studentId, status: 'ACTIVE' as any } as any,
+              data: { status: 'EXPIRED' as any } as any,
+            });
+          }
+
+          await tx.contract.create({
+            data: {
+              code,
+              studentId: app.studentId,
+              roomId: app.approvedRoomId!,
+              applicationId: app.id,
+              startDate,
+              endDate,
+              monthlyRent: Number((app as any).approvedRoom.pricePerMonth),
+              isRoomLeader: false,
+              status: initialStatus,
+              createdById: null,
+            },
+          });
+          createdCount++;
         });
-      } catch {
-        // If contract creation fails for one student (e.g. room full), skip and continue
+      } catch (err) {
+        console.error(`[CRON] Failed to create contract for application ${app.id} (student ${app.studentId}):`, err);
+        failedCount++;
       }
     }
 
-    console.log(`[CRON] Created contracts for ${applications.length} approved applications in period ${periodId}`);
+    console.log(
+      `[CRON] batchCreateContracts period ${periodId}: created=${createdCount} skipped=${skippedCount} failed=${failedCount}`,
+    );
   }
 
   // ========================================

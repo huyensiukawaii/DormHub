@@ -266,17 +266,9 @@ export class StudentApplicationsService {
       throw new BadRequestException('Đợt tự động chỉ cho phép chọn 1 phòng');
     }
 
-    // For auto-assign periods: allow re-registration by cancelling existing application first.
-    // For manual-review periods: reject duplicate submissions as before.
-    if (periodData.hasExistingApplication) {
-      if (!isAutoAssign) {
-        throw new ConflictException('Bạn đã nộp đơn đăng ký cho đợt này rồi');
-      }
-      // Cancel existing application to free the reservation slot
-      await this.prisma.registrationApplication.update({
-        where: { id: periodData.existingApplicationId },
-        data: { status: 'CANCELLED' as any },
-      });
+    // Reject duplicate submissions for manual-review periods
+    if (periodData.hasExistingApplication && !isAutoAssign) {
+      throw new ConflictException('Bạn đã nộp đơn đăng ký cho đợt này rồi');
     }
 
     // Calculate priority score from approved priority documents
@@ -308,7 +300,7 @@ export class StudentApplicationsService {
       isPolicyFamily: approvedTypes.has('POLICY_FAMILY'),
     };
 
-    // Validate room preferences
+    // Validate room preferences against current availability
     if (dto.roomPreferences && dto.roomPreferences.length > 0) {
       const availableRoomIds = periodData.availableRooms
         .filter((r) => r.availableSlots > 0)
@@ -320,41 +312,53 @@ export class StudentApplicationsService {
       }
     }
 
-    // Create application with individual priority fields
-    const application = await this.prisma.registrationApplication.create({
-      data: {
-        studentId,
-        periodId: periodData.period.id,
-        type: dto.applicationType as any,
-        isFirstYear: false,
-        isPoorHousehold: priorityInfo.isPoorHousehold,
-        isNearPoor: priorityInfo.isNearPoor,
-        isOrphan: priorityInfo.isOrphan,
-        isDisabled: priorityInfo.isDisabled,
-        isPolicyFamily: priorityInfo.isPolicyFamily,
-        wasResident: false,
-        priorityScore,
-        status: 'PENDING' as any,
-      },
-    });
+    // Atomically cancel the old app (auto-assign re-registration) and create the new one.
+    // Keeping both in a single transaction prevents a state where the old app is cancelled
+    // but the new one was never created (e.g. due to a subsequent DB error).
+    const application = await this.prisma.$transaction(async (tx) => {
+      if (periodData.hasExistingApplication && isAutoAssign) {
+        await tx.registrationApplication.update({
+          where: { id: periodData.existingApplicationId },
+          data: { status: 'CANCELLED' as any },
+        });
+      }
 
-    // Create room choices separately
-    if (dto.roomPreferences && dto.roomPreferences.length > 0) {
-      await this.prisma.roomChoice.createMany({
-        data: dto.roomPreferences.map((pref) => ({
-          applicationId: application.id,
-          roomId: pref.roomId,
-          priority: pref.priority,
-        })),
+      const app = await tx.registrationApplication.create({
+        data: {
+          studentId,
+          periodId: periodData.period.id,
+          type: dto.applicationType as any,
+          isFirstYear: false,
+          isPoorHousehold: priorityInfo.isPoorHousehold,
+          isNearPoor: priorityInfo.isNearPoor,
+          isOrphan: priorityInfo.isOrphan,
+          isDisabled: priorityInfo.isDisabled,
+          isPolicyFamily: priorityInfo.isPolicyFamily,
+          wasResident: false,
+          priorityScore,
+          status: 'PENDING' as any,
+        },
       });
-    }
+
+      if (dto.roomPreferences && dto.roomPreferences.length > 0) {
+        await tx.roomChoice.createMany({
+          data: dto.roomPreferences.map((pref) => ({
+            applicationId: app.id,
+            roomId: pref.roomId,
+            priority: pref.priority,
+          })),
+        });
+      }
+
+      return app;
+    });
 
     // Auto-approve if the period is configured for it.
     // For auto-assign periods, contracts are NOT created immediately — they are batch-created
     // by the CRON job when the period closes, so the approved room is only a reservation.
     if (isAutoAssign) {
       const allowedBuildingIds = (periodData.period as any).allowedBuildingIds ?? [];
-      await this.autoApproveApplication(application.id, studentId, student.gender, allowedBuildingIds);
+      await this.autoApproveApplication(application.id, studentId, student.gender, allowedBuildingIds, periodData.period.id);
     }
 
     // Update period stats
@@ -372,12 +376,35 @@ export class StudentApplicationsService {
   // ========================================
   // AUTO-APPROVE APPLICATION
   // ========================================
-  private async autoApproveApplication(applicationId: number, studentId: number, gender: string, allowedBuildingIds: number[] = []) {
+  private async autoApproveApplication(applicationId: number, studentId: number, gender: string, allowedBuildingIds: number[] = [], periodId?: number) {
     // Gather student's room preferences (already created)
     const choices = await this.prisma.roomChoice.findMany({
       where: { applicationId },
       orderBy: { priority: 'asc' },
     });
+
+    // Build reservation map: rooms already reserved by other APPROVED apps in this period
+    // (these don't have contracts yet but occupy slots). Exclude self to handle re-registration.
+    const reservationsByRoom = new Map<number, number>();
+    if (periodId) {
+      const reservations = await this.prisma.registrationApplication.groupBy({
+        by: ['approvedRoomId'] as any[],
+        where: {
+          periodId,
+          status: 'APPROVED' as any,
+          approvedRoomId: { not: null },
+          id: { not: applicationId },
+          contract: { is: null },
+        } as any,
+        _count: { approvedRoomId: true } as any,
+      });
+      reservations.forEach((r: any) => reservationsByRoom.set(r.approvedRoomId as number, r._count.approvedRoomId as number));
+    }
+
+    const hasCapacity = (room: { id: number; capacity: number; _count: { contracts: number } }) => {
+      const reserved = reservationsByRoom.get(room.id) ?? 0;
+      return room._count.contracts + reserved < room.capacity;
+    };
 
     let selectedRoomId: number | null = null;
 
@@ -390,10 +417,10 @@ export class StudentApplicationsService {
       });
       const roomById = new Map(preferredRooms.map((r) => [r.id, r]));
 
-      // Try preferred rooms in priority order — must be ACTIVE and have capacity
+      // Try preferred rooms in priority order — must be ACTIVE and have capacity (including reservations)
       for (const choice of choices) {
         const room = roomById.get(choice.roomId);
-        if (room && room.status === 'ACTIVE' && room._count.contracts < room.capacity) {
+        if (room && room.status === 'ACTIVE' && hasCapacity(room)) {
           selectedRoomId = room.id;
           break;
         }
@@ -411,7 +438,7 @@ export class StudentApplicationsService {
         include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
         orderBy: [{ buildingId: 'asc' }, { code: 'asc' }],
       });
-      const availableRoom = fallbackRooms.find((r) => r._count.contracts < r.capacity);
+      const availableRoom = fallbackRooms.find((r) => hasCapacity(r));
       if (availableRoom) selectedRoomId = availableRoom.id;
     }
 
@@ -561,7 +588,7 @@ export class StudentApplicationsService {
         throw new BadRequestException('Cần chọn phòng khi duyệt đơn');
       }
 
-      // Verify room exists and has available capacity
+      // Verify room exists, gender matches, and has capacity
       const room = await this.prisma.room.findUnique({
         where: { id: dto.assignedRoomId },
         include: {
@@ -572,11 +599,23 @@ export class StudentApplicationsService {
       if (!room) {
         throw new NotFoundException('Phòng không tồn tại');
       }
-      if (room._count.contracts >= room.capacity) {
-        throw new BadRequestException('Phòng đã đầy');
-      }
       if (room.gender !== (application as any).student.gender) {
         throw new BadRequestException('Phòng không phù hợp giới tính sinh viên');
+      }
+
+      // For RENEWAL in the same room the student already occupies, skip capacity check —
+      // ContractsService.createFromApplication() will expire the old contract atomically,
+      // so the slot count stays consistent.
+      const studentActiveContract = await this.prisma.contract.findFirst({
+        where: { studentId: application.studentId, status: 'ACTIVE' as any } as any,
+        select: { roomId: true },
+      });
+      const isRenewalSameRoom =
+        (application as any).type === 'RENEWAL' &&
+        studentActiveContract?.roomId === dto.assignedRoomId;
+
+      if (!isRenewalSameRoom && room._count.contracts >= room.capacity) {
+        throw new BadRequestException('Phòng đã đầy');
       }
 
       updateData.approvedRoomId = dto.assignedRoomId;
@@ -976,7 +1015,13 @@ export class StudentApplicationsService {
       paidInvoices,
     ] = await Promise.all([
       this.prisma.room.count({ where: { status: 'ACTIVE' as any } }),
-      this.prisma.contract.count({ where: { status: 'ACTIVE' as any } }),
+      this.prisma.contract
+        .findMany({
+          where: { status: 'ACTIVE' as any },
+          distinct: ['studentId'],
+          select: { studentId: true },
+        })
+        .then((rows) => rows.length),
       this.prisma.registrationApplication.count({ where: { status: 'PENDING' } }),
       this.prisma.contract.count({ where: { status: 'ACTIVE' as any, checkedInAt: null } }),
       this.prisma.maintenanceTicket.count({ where: { status: { in: ['NEW', 'IN_PROGRESS'] as any } } }),
