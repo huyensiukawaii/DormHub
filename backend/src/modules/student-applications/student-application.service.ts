@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RegistrationPeriodsService } from '../registration-periods/registration-periods.service';
+import { ContractsService } from '../contracts/contracts.service';
+import { MailerService } from '../mailer/mailer.service';
+import { ConfigService } from '@nestjs/config';
 import {
   CreateApplicationDto,
   UpdateApplicationStatusDto,
@@ -38,6 +41,8 @@ const APPLICATION_INCLUDE = {
       name: true,
       academicYear: true,
       semester: true,
+      moveInDate: true,
+      moveOutDate: true,
     },
   },
   roomChoices: {
@@ -64,6 +69,9 @@ export class StudentApplicationsService {
   constructor(
     private prisma: PrismaService,
     private periodsService: RegistrationPeriodsService,
+    private contractsService: ContractsService,
+    private mailerService: MailerService,
+    private configService: ConfigService,
   ) {}
 
   // ========================================
@@ -72,7 +80,10 @@ export class StudentApplicationsService {
   async getActivePeriod(studentId: number) {
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
-      select: { gender: true },
+      select: {
+        gender: true,
+        contracts: { where: { status: 'ACTIVE' }, take: 1, select: { id: true } },
+      },
     });
 
     if (!student) {
@@ -80,7 +91,9 @@ export class StudentApplicationsService {
     }
 
     const now = new Date();
-    const period = await this.prisma.registrationPeriod.findFirst({
+
+    // Get all currently open periods (there may be multiple non-building-conflicting ones)
+    const openPeriods = await this.prisma.registrationPeriod.findMany({
       where: {
         status: 'OPEN' as any,
         startDate: { lte: now },
@@ -89,16 +102,52 @@ export class StudentApplicationsService {
       orderBy: { startDate: 'desc' },
     });
 
+    if (!openPeriods.length) return null;
+
+    // If the student already has an active app in one of these periods, prefer that period.
+    // This handles the case where multiple periods are open but the student already registered.
+    const existingAppInAnyPeriod = await this.prisma.registrationApplication.findFirst({
+      where: {
+        studentId,
+        periodId: { in: openPeriods.map((p) => p.id) },
+        status: { notIn: ['CANCELLED'] as any[] },
+      },
+      include: { approvedRoom: { select: { id: true, code: true, buildingId: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let period: (typeof openPeriods)[0] | null = null;
+    if (existingAppInAnyPeriod) {
+      period = openPeriods.find((p) => p.id === existingAppInAnyPeriod.periodId) ?? null;
+    }
     if (!period) {
-      return null;
+      // Pick the first open period that has rooms matching this student's gender
+      for (const p of openPeriods) {
+        const pBuildings = (p as any).allowedBuildingIds as number[];
+        const roomCheck = await this.prisma.room.findFirst({
+          where: {
+            gender: student.gender,
+            status: 'ACTIVE',
+            ...(pBuildings?.length > 0 ? { buildingId: { in: pBuildings } } : {}),
+          },
+          select: { id: true },
+        });
+        if (roomCheck) { period = p; break; }
+      }
+    }
+    if (!period) return null;
+
+    const autoAssignRoom = (period as any).autoAssignRoom as boolean;
+
+    // Get available rooms for this student's gender, filtered by allowed buildings
+    const allowedBuildingIds = (period as any).allowedBuildingIds as number[];
+    const roomWhere: any = { gender: student.gender, status: 'ACTIVE' };
+    if (allowedBuildingIds?.length > 0) {
+      roomWhere.buildingId = { in: allowedBuildingIds };
     }
 
-    // Get available rooms for this student's gender
     const availableRooms = await this.prisma.room.findMany({
-      where: {
-        gender: student.gender,
-        status: 'ACTIVE',
-      },
+      where: roomWhere,
       include: {
         building: true,
         _count: {
@@ -108,14 +157,28 @@ export class StudentApplicationsService {
       orderBy: [{ building: { code: 'asc' } }, { code: 'asc' }],
     });
 
-    // Check if student already applied for this period
-    const existingApplication = await this.prisma.registrationApplication.findFirst({
-      where: {
-        studentId,
-        periodId: period.id,
-        status: { notIn: ['CANCELLED'] as any[] },
-      },
-    });
+    // For auto-assign periods: subtract approved reservations (no contract yet) from availability
+    let reservationsByRoom = new Map<number, number>();
+    if (autoAssignRoom) {
+      const reservations = await this.prisma.registrationApplication.groupBy({
+        by: ['approvedRoomId'] as any[],
+        where: {
+          periodId: period.id,
+          status: 'APPROVED' as any,
+          approvedRoomId: { not: null },
+          contract: { is: null },
+        } as any,
+        _count: { approvedRoomId: true } as any,
+      });
+      reservationsByRoom = new Map(
+        reservations.map((r: any) => [r.approvedRoomId as number, r._count.approvedRoomId as number]),
+      );
+    }
+
+    // Use existing app only if it belongs to the selected period
+    const existingApplication = existingAppInAnyPeriod?.periodId === period.id
+      ? existingAppInAnyPeriod
+      : null;
 
     return {
       period: {
@@ -126,23 +189,33 @@ export class StudentApplicationsService {
         semester: (period as any).semester,
         endDate: period.endDate,
         allowRoomPreference: (period as any).allowRoomPreference,
+        autoAssignRoom,
         moveInDate: (period as any).moveInDate,
         moveOutDate: (period as any).moveOutDate,
+        allowedBuildingIds: (period as any).allowedBuildingIds ?? [],
+        allowedTypes: (period as any).allowedTypes ?? 'ALL',
       },
-      availableRooms: availableRooms.map((room) => ({
-        id: room.id,
-        code: room.code,
-        buildingName: room.building.name,
-        floor: room.floor,
-        roomType: room.roomType,
-        capacity: room.capacity,
-        currentOccupants: room._count.contracts,
-        availableSlots: room.capacity - room._count.contracts,
-        pricePerMonth: room.pricePerMonth,
-        gender: room.gender,
-      })),
+      availableRooms: availableRooms.map((room) => {
+        const reserved = reservationsByRoom.get(room.id) ?? 0;
+        const occupants = room._count.contracts + reserved;
+        return {
+          id: room.id,
+          code: room.code,
+          buildingName: room.building.name,
+          floor: room.floor,
+          roomType: room.roomType,
+          capacity: room.capacity,
+          currentOccupants: occupants,
+          availableSlots: room.capacity - occupants,
+          pricePerMonth: room.pricePerMonth,
+          gender: room.gender,
+        };
+      }),
       hasExistingApplication: !!existingApplication,
       existingApplicationId: existingApplication?.id,
+      existingApplicationStatus: existingApplication?.status ?? null,
+      existingApprovedRoomId: (existingApplication as any)?.approvedRoomId ?? null,
+      hasActiveContract: student.contracts.length > 0,
     };
   }
 
@@ -179,7 +252,22 @@ export class StudentApplicationsService {
       throw new BadRequestException('Hiện không có đợt đăng ký nào đang mở');
     }
 
-    if (periodData.hasExistingApplication) {
+    const isAutoAssign = (periodData.period as any).autoAssignRoom as boolean;
+
+    // Run all validations BEFORE cancelling existing application to avoid data corruption
+    const allowedTypes = (periodData.period as any).allowedTypes ?? 'ALL';
+    if (allowedTypes === 'NEW_ONLY' && dto.applicationType === ApplicationType.RENEWAL) {
+      throw new BadRequestException('Đợt đăng ký này chỉ dành cho đăng ký mới, không nhận đơn gia hạn');
+    }
+    if (allowedTypes === 'RENEWAL_ONLY' && dto.applicationType === ApplicationType.NEW) {
+      throw new BadRequestException('Đợt đăng ký này chỉ dành cho gia hạn, không nhận đơn đăng ký mới');
+    }
+    if (isAutoAssign && dto.roomPreferences && dto.roomPreferences.length > 1) {
+      throw new BadRequestException('Đợt tự động chỉ cho phép chọn 1 phòng');
+    }
+
+    // Reject duplicate submissions for manual-review periods
+    if (periodData.hasExistingApplication && !isAutoAssign) {
       throw new ConflictException('Bạn đã nộp đơn đăng ký cho đợt này rồi');
     }
 
@@ -195,7 +283,7 @@ export class StudentApplicationsService {
       ORPHAN: 15,
       DISABLED: 15,
       POLICY_FAMILY: 10,
-      GPA_TRANSCRIPT: 10, // +10 khi có bảng điểm GPA được duyệt
+      GPA_TRANSCRIPT: 10,
     };
 
     const approvedTypes = new Set(approvedDocs.map((d) => d.type as string));
@@ -212,46 +300,65 @@ export class StudentApplicationsService {
       isPolicyFamily: approvedTypes.has('POLICY_FAMILY'),
     };
 
-    // Validate room preferences
+    // Validate room preferences against current availability
     if (dto.roomPreferences && dto.roomPreferences.length > 0) {
-      if (!periodData.period.allowRoomPreference) {
-        throw new BadRequestException('Đợt đăng ký này không cho phép chọn phòng ưu tiên');
-      }
-      const availableRoomIds = periodData.availableRooms.map((r) => r.id);
+      const availableRoomIds = periodData.availableRooms
+        .filter((r) => r.availableSlots > 0)
+        .map((r) => r.id);
       for (const pref of dto.roomPreferences) {
         if (!availableRoomIds.includes(pref.roomId)) {
-          throw new BadRequestException(`Phòng ID ${pref.roomId} không khả dụng`);
+          throw new BadRequestException(`Phòng ID ${pref.roomId} không khả dụng hoặc đã hết chỗ`);
         }
       }
     }
 
-    // Create application with individual priority fields
-    const application = await this.prisma.registrationApplication.create({
-      data: {
-        studentId,
-        periodId: periodData.period.id,
-        type: dto.applicationType as any,
-        isFirstYear: false,
-        isPoorHousehold: priorityInfo.isPoorHousehold,
-        isNearPoor: priorityInfo.isNearPoor,
-        isOrphan: priorityInfo.isOrphan,
-        isDisabled: priorityInfo.isDisabled,
-        isPolicyFamily: priorityInfo.isPolicyFamily,
-        wasResident: false,
-        priorityScore,
-        status: 'PENDING' as any,
-      },
+    // Atomically cancel the old app (auto-assign re-registration) and create the new one.
+    // Keeping both in a single transaction prevents a state where the old app is cancelled
+    // but the new one was never created (e.g. due to a subsequent DB error).
+    const application = await this.prisma.$transaction(async (tx) => {
+      if (periodData.hasExistingApplication && isAutoAssign) {
+        await tx.registrationApplication.update({
+          where: { id: periodData.existingApplicationId },
+          data: { status: 'CANCELLED' as any },
+        });
+      }
+
+      const app = await tx.registrationApplication.create({
+        data: {
+          studentId,
+          periodId: periodData.period.id,
+          type: dto.applicationType as any,
+          isFirstYear: false,
+          isPoorHousehold: priorityInfo.isPoorHousehold,
+          isNearPoor: priorityInfo.isNearPoor,
+          isOrphan: priorityInfo.isOrphan,
+          isDisabled: priorityInfo.isDisabled,
+          isPolicyFamily: priorityInfo.isPolicyFamily,
+          wasResident: false,
+          priorityScore,
+          status: 'PENDING' as any,
+        },
+      });
+
+      if (dto.roomPreferences && dto.roomPreferences.length > 0) {
+        await tx.roomChoice.createMany({
+          data: dto.roomPreferences.map((pref) => ({
+            applicationId: app.id,
+            roomId: pref.roomId,
+            priority: pref.priority,
+          })),
+        });
+      }
+
+      return app;
     });
 
-    // Create room choices separately
-    if (dto.roomPreferences && dto.roomPreferences.length > 0) {
-      await this.prisma.roomChoice.createMany({
-        data: dto.roomPreferences.map((pref) => ({
-          applicationId: application.id,
-          roomId: pref.roomId,
-          priority: pref.priority,
-        })),
-      });
+    // Auto-approve if the period is configured for it.
+    // For auto-assign periods, contracts are NOT created immediately — they are batch-created
+    // by the CRON job when the period closes, so the approved room is only a reservation.
+    if (isAutoAssign) {
+      const allowedBuildingIds = (periodData.period as any).allowedBuildingIds ?? [];
+      await this.autoApproveApplication(application.id, studentId, student.gender, allowedBuildingIds, periodData.period.id);
     }
 
     // Update period stats
@@ -264,6 +371,97 @@ export class StudentApplicationsService {
     });
 
     return this.transformToResponse(full);
+  }
+
+  // ========================================
+  // AUTO-APPROVE APPLICATION
+  // ========================================
+  private async autoApproveApplication(applicationId: number, studentId: number, gender: string, allowedBuildingIds: number[] = [], periodId?: number) {
+    // Gather student's room preferences (already created)
+    const choices = await this.prisma.roomChoice.findMany({
+      where: { applicationId },
+      orderBy: { priority: 'asc' },
+    });
+
+    // Build reservation map: rooms already reserved by other APPROVED apps in this period
+    // (these don't have contracts yet but occupy slots). Exclude self to handle re-registration.
+    const reservationsByRoom = new Map<number, number>();
+    if (periodId) {
+      const reservations = await this.prisma.registrationApplication.groupBy({
+        by: ['approvedRoomId'] as any[],
+        where: {
+          periodId,
+          status: 'APPROVED' as any,
+          approvedRoomId: { not: null },
+          id: { not: applicationId },
+          contract: { is: null },
+        } as any,
+        _count: { approvedRoomId: true } as any,
+      });
+      reservations.forEach((r: any) => reservationsByRoom.set(r.approvedRoomId as number, r._count.approvedRoomId as number));
+    }
+
+    const hasCapacity = (room: { id: number; capacity: number; _count: { contracts: number } }) => {
+      const reserved = reservationsByRoom.get(room.id) ?? 0;
+      return room._count.contracts + reserved < room.capacity;
+    };
+
+    let selectedRoomId: number | null = null;
+
+    // Batch-fetch all preferred rooms to avoid N+1
+    const preferredRoomIds = choices.map((c) => c.roomId);
+    if (preferredRoomIds.length > 0) {
+      const preferredRooms = await this.prisma.room.findMany({
+        where: { id: { in: preferredRoomIds } },
+        include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
+      });
+      const roomById = new Map(preferredRooms.map((r) => [r.id, r]));
+
+      // Try preferred rooms in priority order — must be ACTIVE and have capacity (including reservations)
+      for (const choice of choices) {
+        const room = roomById.get(choice.roomId);
+        if (room && room.status === 'ACTIVE' && hasCapacity(room)) {
+          selectedRoomId = room.id;
+          break;
+        }
+      }
+    }
+
+    // If preferred room unavailable (or no preference): fall back to first available room
+    // matching gender (respecting allowed buildings). Use findMany + find to avoid missing
+    // available rooms when the first result by sort is already full.
+    if (!selectedRoomId) {
+      const fallbackWhere: any = { gender: gender as any, status: 'ACTIVE' };
+      if (allowedBuildingIds.length > 0) fallbackWhere.buildingId = { in: allowedBuildingIds };
+      const fallbackRooms = await this.prisma.room.findMany({
+        where: fallbackWhere,
+        include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
+        orderBy: [{ buildingId: 'asc' }, { code: 'asc' }],
+      });
+      const availableRoom = fallbackRooms.find((r) => hasCapacity(r));
+      if (availableRoom) selectedRoomId = availableRoom.id;
+    }
+
+    // No room available → leave as PENDING for admin to handle
+    if (!selectedRoomId) return;
+
+    // Approve the application with the reserved room.
+    // Contract is NOT created here — it will be batch-created when the period closes.
+    await this.prisma.registrationApplication.update({
+      where: { id: applicationId },
+      data: {
+        status: 'APPROVED' as any,
+        approvedRoomId: selectedRoomId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    // Send approval email (fire-and-forget)
+    const full = await this.prisma.registrationApplication.findUnique({
+      where: { id: applicationId },
+      include: APPLICATION_INCLUDE as any,
+    });
+    if (full) this.sendResultEmail(full, 'APPROVED').catch(() => {});
   }
 
   // ========================================
@@ -390,7 +588,7 @@ export class StudentApplicationsService {
         throw new BadRequestException('Cần chọn phòng khi duyệt đơn');
       }
 
-      // Verify room exists and has available capacity
+      // Verify room exists, gender matches, and has capacity
       const room = await this.prisma.room.findUnique({
         where: { id: dto.assignedRoomId },
         include: {
@@ -401,11 +599,23 @@ export class StudentApplicationsService {
       if (!room) {
         throw new NotFoundException('Phòng không tồn tại');
       }
-      if (room._count.contracts >= room.capacity) {
-        throw new BadRequestException('Phòng đã đầy');
-      }
       if (room.gender !== (application as any).student.gender) {
         throw new BadRequestException('Phòng không phù hợp giới tính sinh viên');
+      }
+
+      // For RENEWAL in the same room the student already occupies, skip capacity check —
+      // ContractsService.createFromApplication() will expire the old contract atomically,
+      // so the slot count stays consistent.
+      const studentActiveContract = await this.prisma.contract.findFirst({
+        where: { studentId: application.studentId, status: 'ACTIVE' as any } as any,
+        select: { roomId: true },
+      });
+      const isRenewalSameRoom =
+        (application as any).type === 'RENEWAL' &&
+        studentActiveContract?.roomId === dto.assignedRoomId;
+
+      if (!isRenewalSameRoom && room._count.contracts >= room.capacity) {
+        throw new BadRequestException('Phòng đã đầy');
       }
 
       updateData.approvedRoomId = dto.assignedRoomId;
@@ -417,8 +627,27 @@ export class StudentApplicationsService {
       include: APPLICATION_INCLUDE as any,
     });
 
+    if (dto.status === 'APPROVED') {
+      try {
+        await this.contractsService.createFromApplication(
+          { applicationId: id, roomId: dto.assignedRoomId! },
+          reviewerId,
+        );
+      } catch (err) {
+        // Revert application to PENDING so admin can retry
+        await this.prisma.registrationApplication.update({
+          where: { id },
+          data: { status: 'PENDING' as any, approvedRoomId: null, reviewedById: null, reviewedAt: null },
+        });
+        throw err;
+      }
+    }
+
     // Update period stats
     await this.periodsService.refreshStats(application.periodId);
+
+    // Gửi email thông báo kết quả (fire-and-forget, không block response)
+    this.sendResultEmail(updated, dto.status).catch(() => {});
 
     return this.transformToResponse(updated);
   }
@@ -429,6 +658,7 @@ export class StudentApplicationsService {
   async cancel(id: number, studentId: number) {
     const application = await this.prisma.registrationApplication.findUnique({
       where: { id },
+      include: { period: { select: { endDate: true, autoAssignRoom: true } } },
     });
 
     if (!application) {
@@ -439,7 +669,14 @@ export class StudentApplicationsService {
       throw new ForbiddenException('Bạn không có quyền hủy đơn này');
     }
 
-    if (application.status !== 'PENDING') {
+    // For auto-assign periods: also allow canceling APPROVED reservations while period is open
+    const period = (application as any).period;
+    const isAutoAssign = period?.autoAssignRoom as boolean;
+    const periodStillOpen = period?.endDate && new Date(period.endDate) > new Date();
+
+    if (application.status === 'APPROVED' && isAutoAssign && periodStillOpen) {
+      // Allowed: release the reservation
+    } else if (application.status !== 'PENDING') {
       throw new BadRequestException('Chỉ có thể hủy đơn đang chờ duyệt');
     }
 
@@ -603,19 +840,26 @@ export class StudentApplicationsService {
       throw new ForbiddenException('Bạn không có quyền xem đơn này');
     }
 
-    const approvedDocs = await this.prisma.priorityDocument.findMany({
-      where: {
-        studentId: application.studentId,
-        status: 'APPROVED' as any,
-        createdAt: { lte: application.createdAt },
-      },
-      select: { type: true, fileName: true, fileUrl: true },
-    });
+    const [approvedDocs, pendingDocs] = await Promise.all([
+      this.prisma.priorityDocument.findMany({
+        where: {
+          studentId: application.studentId,
+          status: 'APPROVED' as any,
+          createdAt: { lte: application.createdAt },
+        },
+        select: { type: true, fileName: true, fileUrl: true },
+      }),
+      this.prisma.priorityDocument.findMany({
+        where: { studentId: application.studentId, status: 'PENDING' as any },
+        select: { id: true, type: true, fileName: true },
+      }),
+    ]);
 
     return {
       ...application,
       priorityBreakdown: this.buildPriorityBreakdown(application, approvedDocs),
       approvedDocuments: approvedDocs,
+      pendingDocuments: pendingDocs,
     };
   }
 
@@ -681,10 +925,15 @@ export class StudentApplicationsService {
       orderBy: [{ buildingId: 'asc' }, { code: 'asc' }],
     });
 
+    // Với đơn gia hạn muốn ở lại, phòng hiện tại cũng được coi là nguyện vọng
+    const renewalCurrentRoomId =
+      app.type === 'RENEWAL' && (app as any).wantSameRoom ? (app as any).currentRoomId : null;
+
     const roomsWithAvailability = rooms.map((room) => {
       const currentOccupants = room.contracts.length;
       const availableSlots = room.capacity - currentOccupants;
-      const isPreference = app.roomChoices.find((c) => c.roomId === room.id);
+      const choiceMatch = app.roomChoices.find((c) => c.roomId === room.id);
+      const isCurrentRoom = renewalCurrentRoomId === room.id;
 
       return {
         id: room.id,
@@ -698,8 +947,9 @@ export class StudentApplicationsService {
         currentOccupants,
         availableSlots,
         pricePerMonth: room.pricePerMonth,
-        isUserPreference: !!isPreference,
-        preferencePriority: isPreference?.priority || null,
+        isUserPreference: !!choiceMatch || isCurrentRoom,
+        preferencePriority: choiceMatch?.priority ?? (isCurrentRoom ? 0 : null),
+        isCurrentRoom,
       };
     });
 
@@ -744,6 +994,166 @@ export class StudentApplicationsService {
     });
 
     return updated;
+  }
+
+  // ========================================
+  // GET ADMIN DASHBOARD
+  // ========================================
+  async getAdminDashboard() {
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    const [
+      totalRooms,
+      activeContractsCount,
+      pendingApplications,
+      contractsNotCheckedIn,
+      openTickets,
+      buildings,
+      recentApps,
+      recentTickets,
+      paidInvoices,
+    ] = await Promise.all([
+      this.prisma.room.count({ where: { status: 'ACTIVE' as any } }),
+      this.prisma.contract
+        .findMany({
+          where: { status: 'ACTIVE' as any },
+          distinct: ['studentId'],
+          select: { studentId: true },
+        })
+        .then((rows) => rows.length),
+      this.prisma.registrationApplication.count({ where: { status: 'PENDING' } }),
+      this.prisma.contract.count({ where: { status: 'ACTIVE' as any, checkedInAt: null } }),
+      this.prisma.maintenanceTicket.count({ where: { status: { in: ['NEW', 'IN_PROGRESS'] as any } } }),
+      this.prisma.building.findMany({
+        where: { status: 'ACTIVE' as any },
+        include: {
+          rooms: {
+            where: { status: 'ACTIVE' as any },
+            include: {
+              _count: { select: { contracts: { where: { status: 'ACTIVE' as any } } } },
+            },
+          },
+        },
+        orderBy: { code: 'asc' },
+      }),
+      this.prisma.registrationApplication.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          student: { select: { fullName: true, studentCode: true } },
+          approvedRoom: { select: { code: true } },
+        },
+      }),
+      this.prisma.maintenanceTicket.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: { room: { select: { code: true } } },
+      }),
+      this.prisma.invoice.findMany({
+        where: { status: 'PAID' as any, paidAt: { gte: sixMonthsAgo } },
+        select: { paidAt: true, totalAmount: true },
+      }),
+    ]);
+
+    // Building occupancy
+    let availableRooms = 0;
+    const buildingOccupancy = buildings.map((b) => {
+      let totalCapacity = 0;
+      let occupied = 0;
+      b.rooms.forEach((r) => {
+        totalCapacity += r.capacity;
+        const roomOccupied = (r as any)._count.contracts;
+        occupied += roomOccupied;
+        if (roomOccupied < r.capacity) availableRooms++;
+      });
+      const percentage =
+        totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 1000) / 10 : 0;
+      return { id: b.id, code: b.code, name: b.name, totalCapacity, occupied, percentage };
+    });
+
+    // Revenue by month (last 6 months)
+    const revenueMap = new Map<string, number>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      revenueMap.set(key, 0);
+    }
+    paidInvoices.forEach((inv) => {
+      if (!inv.paidAt) return;
+      const key = `${inv.paidAt.getFullYear()}-${String(inv.paidAt.getMonth() + 1).padStart(2, '0')}`;
+      if (revenueMap.has(key)) {
+        revenueMap.set(key, (revenueMap.get(key) ?? 0) + Number(inv.totalAmount));
+      }
+    });
+    const revenueByMonth = Array.from(revenueMap.entries()).map(([month, amount]) => ({
+      month,
+      amount,
+    }));
+
+    return {
+      stats: {
+        totalRooms,
+        availableRooms,
+        studentsWithActiveContracts: activeContractsCount,
+        pendingApplications,
+        contractsNotCheckedIn,
+        openTickets,
+      },
+      buildingOccupancy,
+      recentApplications: recentApps.map((app) => ({
+        id: app.id,
+        studentName: (app as any).student.fullName,
+        studentCode: (app as any).student.studentCode,
+        roomCode: (app as any).approvedRoom?.code ?? null,
+        status: app.status,
+        createdAt: app.createdAt,
+      })),
+      recentTickets: recentTickets.map((t) => ({
+        id: t.id,
+        title: t.title,
+        roomCode: (t as any).room.code,
+        priority: t.priority,
+        status: t.status,
+        createdAt: t.createdAt,
+      })),
+      revenueByMonth,
+    };
+  }
+
+  // ========================================
+  // HELPER: Send result email
+  // ========================================
+  private async sendResultEmail(app: any, status: string) {
+    const studentWithEmail = await this.prisma.student.findUnique({
+      where: { id: app.studentId },
+      include: { user: { select: { email: true } } },
+    });
+    const email = (studentWithEmail as any)?.user?.email;
+    if (!email) return;
+
+    const loginUrl =
+      this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000') + '/student/contracts';
+
+    if (status === 'APPROVED') {
+      await this.mailerService.sendApplicationApprovedEmail({
+        to: email,
+        studentName: app.student?.fullName ?? '',
+        periodName: app.period?.name ?? '',
+        roomCode: app.approvedRoom?.code ?? '',
+        buildingName: app.approvedRoom?.building?.name ?? '',
+        moveInDate: app.period?.moveInDate ?? null,
+        moveOutDate: app.period?.moveOutDate ?? null,
+        loginUrl,
+      });
+    } else if (status === 'REJECTED') {
+      await this.mailerService.sendApplicationRejectedEmail({
+        to: email,
+        studentName: app.student?.fullName ?? '',
+        periodName: app.period?.name ?? '',
+        rejectionReason: app.rejectionReason ?? 'Không đạt tiêu chí xét duyệt',
+      });
+    }
   }
 
   // ========================================

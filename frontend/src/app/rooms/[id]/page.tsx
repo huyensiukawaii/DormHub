@@ -24,6 +24,7 @@ import {
   Wrench,
   MoreVertical,
   X,
+  Crown,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -51,6 +52,7 @@ interface Room {
 interface Resident {
   id: number;
   contractId: number;
+  isRoomLeader: boolean;
   student: {
     id: number;
     studentCode: string;
@@ -451,6 +453,12 @@ export default function RoomDetailPage() {
                           </Link>
                           {getContractStatusBadge(resident.contractStatus)}
                         </div>
+
+                        {resident.isRoomLeader && (
+                          <div className="flex items-center gap-1 text-xs font-medium text-amber-600 mb-1">
+                            <Crown className="w-3 h-3" /> Trưởng phòng
+                          </div>
+                        )}
 
                         <div className="flex items-center gap-3 text-xs text-slate-500 mb-2">
                           <span className="font-medium text-slate-600">{resident.student.studentCode}</span>

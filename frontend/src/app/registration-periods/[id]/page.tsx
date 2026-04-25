@@ -38,9 +38,10 @@ interface RegistrationPeriod {
   moveInDate?: string;
   moveOutDate?: string;
   maxApplicationsPerStudent: number;
-  allowRoomPreference: boolean;
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
+  allowedBuildingIds: number[];
+  allowedTypes: string;
   status: PeriodStatus;
   totalApplications: number;
   approvedCount: number;
@@ -82,9 +83,11 @@ export default function RegistrationPeriodDetailPage() {
   const [stats, setStats] = useState<PeriodStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [buildings, setBuildings] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     fetchData();
+    api.get('/buildings?status=ACTIVE&limit=50').then((res) => setBuildings(res.data?.data ?? res.data ?? [])).catch(() => {});
   }, [periodId]);
 
   const fetchData = async () => {
@@ -305,16 +308,26 @@ export default function RegistrationPeriodDetailPage() {
                 <span className="text-sm font-medium text-slate-800">{period.maxApplicationsPerStudent}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-600">Chọn phòng ưu tiên</span>
-                <span className={`text-sm font-medium ${period.allowRoomPreference ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  {period.allowRoomPreference ? 'Có' : 'Không'}
-                </span>
+                <span className="text-sm text-slate-600">Loại đơn nhận</span>
+                {period.allowedTypes === 'NEW_ONLY' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Chỉ đăng ký mới</span>
+                ) : period.allowedTypes === 'RENEWAL_ONLY' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">Chỉ gia hạn</span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Tất cả</span>
+                )}
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-slate-600">Tự động xếp phòng</span>
-                <span className={`text-sm font-medium ${period.autoAssignRoom ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  {period.autoAssignRoom ? 'Có' : 'Không'}
-                </span>
+                <span className="text-sm text-slate-600">Phương thức duyệt</span>
+                {period.autoAssignRoom ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                    Duyệt tự động
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                    Xét duyệt theo ưu tiên
+                  </span>
+                )}
               </div>
             </div>
 
@@ -330,6 +343,24 @@ export default function RegistrationPeriodDetailPage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-sm text-slate-600 mb-2">Tòa nhà mở đăng ký:</p>
+              {period.allowedBuildingIds?.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {period.allowedBuildingIds.map((bid) => {
+                    const b = buildings.find((x) => x.id === bid);
+                    return (
+                      <span key={bid} className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded">
+                        {b ? b.name : `Tòa #${bid}`}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span className="text-sm text-emerald-600 font-medium">Tất cả tòa</span>
+              )}
+            </div>
           </div>
 
           {/* Description */}
@@ -464,7 +495,7 @@ export default function RegistrationPeriodDetailPage() {
                     Số đơn theo ngày (14 ngày gần nhất)
                   </h3>
                   <div className="h-40 flex items-end gap-1">
-                    {stats.dailyApplications.map((item, index) => {
+                    {stats.dailyApplications.map((item) => {
                       const maxCount = Math.max(...stats.dailyApplications.map((i) => i.count));
                       const height = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
                       return (

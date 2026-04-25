@@ -21,6 +21,14 @@ import {
 export class RegistrationPeriodsService {
   constructor(private prisma: PrismaService) {}
 
+  // Returns true if two building-id sets share at least one building.
+  // Empty array means "all buildings" and therefore overlaps with everything.
+  private buildingsOverlap(a: number[], b: number[]): boolean {
+    if (a.length === 0 || b.length === 0) return true;
+    const setA = new Set(a);
+    return b.some((id) => setA.has(id));
+  }
+
   // ========================================
   // FIND ALL (PAGINATED)
   // ========================================
@@ -192,25 +200,23 @@ export class RegistrationPeriodsService {
       }
     }
 
-    // Check overlapping periods with same academic year & semester
-    const overlapping = await this.prisma.registrationPeriod.findFirst({
+    // Check building conflicts: multiple concurrent periods allowed only if buildings don't overlap.
+    // [] means "all buildings" and conflicts with everything.
+    const newBuildings = (dto.allowedBuildingIds ?? []) as number[];
+    const dateOverlapping = await this.prisma.registrationPeriod.findMany({
       where: {
-        academicYear: dto.academicYear,
-        semester: dto.semester,
-        status: { notIn: [RegistrationPeriodStatus.CANCELLED, RegistrationPeriodStatus.DRAFT] },
-        OR: [
-          {
-            startDate: { lte: endDate },
-            endDate: { gte: startDate },
-          },
-        ],
+        status: { in: [RegistrationPeriodStatus.OPEN, RegistrationPeriodStatus.UPCOMING] },
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
       },
     });
-
-    if (overlapping) {
-      throw new ConflictException(
-        `Đã có đợt đăng ký "${overlapping.name}" trong khoảng thời gian này`,
-      );
+    for (const p of dateOverlapping) {
+      const existingBuildings = ((p as any).allowedBuildingIds ?? []) as number[];
+      if (this.buildingsOverlap(newBuildings, existingBuildings)) {
+        throw new ConflictException(
+          `Đã có đợt đăng ký "${p.name}" trùng tòa nhà trong cùng khoảng thời gian`,
+        );
+      }
     }
 
     const period = await this.prisma.registrationPeriod.create({
@@ -225,9 +231,11 @@ export class RegistrationPeriodsService {
         moveInDate: dto.moveInDate ? new Date(dto.moveInDate) : null,
         moveOutDate: dto.moveOutDate ? new Date(dto.moveOutDate) : null,
         maxApplicationsPerStudent: dto.maxApplicationsPerStudent || 1,
-        allowRoomPreference: dto.allowRoomPreference || false,
+        allowRoomPreference: dto.allowRoomPreference ?? true,
         autoAssignRoom: dto.autoAssignRoom || false,
         targetAdmissionYears: dto.targetAdmissionYears ?? [],
+        allowedBuildingIds: dto.allowedBuildingIds ?? [],
+        allowedTypes: dto.allowedTypes ?? 'ALL',
         status: dto.status || RegistrationPeriodStatus.DRAFT,
         createdById: userId,
       },
@@ -285,24 +293,27 @@ export class RegistrationPeriodsService {
       throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu');
     }
 
-    // Check overlapping periods (same as create, excluding self)
+    // Check building conflicts (same logic as create, excluding self)
     if (
       newStatus !== RegistrationPeriodStatus.DRAFT &&
       newStatus !== RegistrationPeriodStatus.CANCELLED
     ) {
-      const overlapping = await this.prisma.registrationPeriod.findFirst({
+      const updatedBuildings = (dto.allowedBuildingIds ?? (period as any).allowedBuildingIds ?? []) as number[];
+      const dateOverlapping = await this.prisma.registrationPeriod.findMany({
         where: {
           id: { not: id },
-          academicYear,
-          semester,
-          status: { notIn: [RegistrationPeriodStatus.CANCELLED, RegistrationPeriodStatus.DRAFT] as any[] },
-          OR: [{ startDate: { lte: endDate }, endDate: { gte: startDate } }],
+          status: { in: [RegistrationPeriodStatus.OPEN, RegistrationPeriodStatus.UPCOMING] as any[] },
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
         } as any,
       });
-      if (overlapping) {
-        throw new ConflictException(
-          `Đã có đợt đăng ký "${overlapping.name}" trong khoảng thời gian này`,
-        );
+      for (const p of dateOverlapping) {
+        const existingBuildings = ((p as any).allowedBuildingIds ?? []) as number[];
+        if (this.buildingsOverlap(updatedBuildings, existingBuildings)) {
+          throw new ConflictException(
+            `Đã có đợt đăng ký "${p.name}" trùng tòa nhà trong cùng khoảng thời gian`,
+          );
+        }
       }
     }
 
@@ -322,6 +333,8 @@ export class RegistrationPeriodsService {
         allowRoomPreference: dto.allowRoomPreference,
         autoAssignRoom: dto.autoAssignRoom,
         targetAdmissionYears: dto.targetAdmissionYears,
+        allowedBuildingIds: dto.allowedBuildingIds,
+        allowedTypes: dto.allowedTypes,
         status: dto.status,
       },
       include: {
@@ -535,7 +548,15 @@ export class RegistrationPeriodsService {
       },
     });
 
-    // Auto close OPEN periods
+    // Auto close OPEN periods and collect their IDs for contract batch creation
+    const closedPeriods = await this.prisma.registrationPeriod.findMany({
+      where: {
+        status: RegistrationPeriodStatus.OPEN,
+        endDate: { lt: now },
+        autoAssignRoom: true,
+      },
+    });
+
     await this.prisma.registrationPeriod.updateMany({
       where: {
         status: RegistrationPeriodStatus.OPEN,
@@ -545,6 +566,101 @@ export class RegistrationPeriodsService {
         status: RegistrationPeriodStatus.CLOSED,
       },
     });
+
+    // Batch-create contracts for approved applications in just-closed auto-assign periods
+    for (const period of closedPeriods) {
+      await this.batchCreateContracts(period.id);
+    }
+  }
+
+  // ========================================
+  // BATCH CREATE CONTRACTS (called when auto-assign period closes)
+  // ========================================
+  async batchCreateContracts(periodId: number) {
+    const period = await this.prisma.registrationPeriod.findUnique({ where: { id: periodId } });
+    if (!period) return;
+
+    // Find all APPROVED applications for this period that don't have a contract yet
+    const applications = await this.prisma.registrationApplication.findMany({
+      where: {
+        periodId,
+        status: 'APPROVED' as any,
+        approvedRoomId: { not: null },
+        contract: { is: null },
+      } as any,
+      include: {
+        student: { select: { id: true, gender: true } },
+        approvedRoom: { select: { id: true, pricePerMonth: true } },
+      },
+    });
+
+    if (applications.length === 0) return;
+
+    const startDate = (period as any).moveInDate ?? period.startDate;
+    const endDate = (period as any).moveOutDate ?? period.endDate;
+    const initialStatus = new Date(endDate) < new Date() ? 'EXPIRED' : 'ACTIVE';
+    const year = new Date().getFullYear();
+    const prefix = `HD-${year}-`;
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+
+    for (const app of applications) {
+      if (!app.approvedRoomId) continue;
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // Idempotency: skip if a contract was already created for this application
+          const existing = await tx.contract.findFirst({
+            where: { applicationId: app.id },
+            select: { id: true },
+          });
+          if (existing) { skippedCount++; return; }
+
+          // Generate code inside the transaction to avoid duplicates with concurrent manual creation
+          const lastContract = await tx.contract.findFirst({
+            where: { code: { startsWith: prefix } },
+            orderBy: { code: 'desc' },
+            select: { code: true },
+          });
+          const nextNum = lastContract
+            ? (parseInt(lastContract.code.replace(prefix, ''), 10) || 0) + 1
+            : 1;
+          const code = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+
+          // For RENEWAL (or any case creating an ACTIVE contract): expire previous ACTIVE contracts
+          if (initialStatus === 'ACTIVE') {
+            await tx.contract.updateMany({
+              where: { studentId: app.studentId, status: 'ACTIVE' as any } as any,
+              data: { status: 'EXPIRED' as any } as any,
+            });
+          }
+
+          await tx.contract.create({
+            data: {
+              code,
+              studentId: app.studentId,
+              roomId: app.approvedRoomId!,
+              applicationId: app.id,
+              startDate,
+              endDate,
+              monthlyRent: Number((app as any).approvedRoom.pricePerMonth),
+              isRoomLeader: false,
+              status: initialStatus,
+              createdById: null,
+            },
+          });
+          createdCount++;
+        });
+      } catch (err) {
+        console.error(`[CRON] Failed to create contract for application ${app.id} (student ${app.studentId}):`, err);
+        failedCount++;
+      }
+    }
+
+    console.log(
+      `[CRON] batchCreateContracts period ${periodId}: created=${createdCount} skipped=${skippedCount} failed=${failedCount}`,
+    );
   }
 
   // ========================================
@@ -614,6 +730,8 @@ export class RegistrationPeriodsService {
       allowRoomPreference: period.allowRoomPreference,
       autoAssignRoom: period.autoAssignRoom,
       targetAdmissionYears: period.targetAdmissionYears as number[] | undefined,
+      allowedBuildingIds: period.allowedBuildingIds as number[],
+      allowedTypes: (period as any).allowedTypes ?? 'ALL',
       status: period.status,
       totalApplications: period.totalApplications,
       approvedCount: period.approvedCount,

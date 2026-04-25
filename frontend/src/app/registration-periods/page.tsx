@@ -38,9 +38,10 @@ interface RegistrationPeriod {
   moveInDate?: string;
   moveOutDate?: string;
   maxApplicationsPerStudent: number;
-  allowRoomPreference: boolean;
   autoAssignRoom: boolean;
   targetAdmissionYears?: number[];
+  allowedBuildingIds: number[];
+  allowedTypes: string;
   status: PeriodStatus;
   totalApplications: number;
   approvedCount: number;
@@ -104,6 +105,9 @@ export default function RegistrationPeriodsPage() {
     setOpenMenuId(openMenuId === periodId ? null : periodId);
   };
 
+  // Buildings list for picker
+  const [buildings, setBuildings] = useState<{ id: number; code: string; name: string }[]>([]);
+
   // Form data
   const [formData, setFormData] = useState({
     code: '',
@@ -116,9 +120,11 @@ export default function RegistrationPeriodsPage() {
     moveInDate: '',
     moveOutDate: '',
     maxApplicationsPerStudent: 1,
-    allowRoomPreference: false,
+    allowRoomPreference: true,
     autoAssignRoom: false,
     targetAdmissionYears: [] as number[],
+    allowedBuildingIds: [] as number[],
+    allowedTypes: 'ALL',
     status: 'DRAFT' as PeriodStatus,
   });
 
@@ -142,6 +148,13 @@ export default function RegistrationPeriodsPage() {
   useEffect(() => {
     fetchPeriods();
   }, [page, filterYear, filterStatus]);
+
+  useEffect(() => {
+    api.get('/buildings?status=ACTIVE&limit=50').then((res) => {
+      const list = res.data?.data ?? res.data;
+      setBuildings(Array.isArray(list) ? list.map((b: any) => ({ id: b.id, code: b.code, name: b.name })) : []);
+    }).catch(() => {});
+  }, []);
 
   // Handle ?edit=id from detail page "Chỉnh sửa" button
   useEffect(() => {
@@ -199,9 +212,11 @@ export default function RegistrationPeriodsPage() {
       moveInDate: '',
       moveOutDate: '',
       maxApplicationsPerStudent: 1,
-      allowRoomPreference: false,
+      allowRoomPreference: true,
       autoAssignRoom: false,
       targetAdmissionYears: [],
+      allowedBuildingIds: [],
+      allowedTypes: 'ALL',
       status: 'DRAFT',
     });
     setFormError('');
@@ -222,9 +237,11 @@ export default function RegistrationPeriodsPage() {
       moveInDate: period.moveInDate?.split('T')[0] || '',
       moveOutDate: period.moveOutDate?.split('T')[0] || '',
       maxApplicationsPerStudent: period.maxApplicationsPerStudent,
-      allowRoomPreference: period.allowRoomPreference,
+      allowRoomPreference: true,
       autoAssignRoom: period.autoAssignRoom,
       targetAdmissionYears: period.targetAdmissionYears || [],
+      allowedBuildingIds: period.allowedBuildingIds || [],
+      allowedTypes: period.allowedTypes || 'ALL',
       status: period.status,
     });
     setFormError('');
@@ -450,9 +467,21 @@ export default function RegistrationPeriodsPage() {
                             {period.name}
                             <ChevronRight className="w-3.5 h-3.5 opacity-50" />
                           </button>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {period.code} • {period.academicYear} • HK{period.semester}
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-slate-500">
+                              {period.code} • {period.academicYear} • HK{period.semester}
+                            </p>
+                            {period.autoAssignRoom ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Tự động</span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">Ưu tiên</span>
+                            )}
+                            {period.allowedBuildingIds?.length > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                                {period.allowedBuildingIds.length} tòa
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
@@ -771,39 +800,132 @@ export default function RegistrationPeriodsPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+              <div className="p-4 bg-slate-50 rounded-lg space-y-4">
                 <h4 className="text-sm font-semibold text-slate-700">Cấu hình</h4>
-                <div className="flex items-center gap-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
+
+                {/* Approval mode */}
+                {(() => {
+                  const locked = modalMode === 'edit' && !!selectedPeriod &&
+                    (selectedPeriod.status !== 'DRAFT' || selectedPeriod.totalApplications > 0);
+                  return (
+                    <div>
+                      <p className="text-xs font-medium text-slate-600 mb-2">Phương thức duyệt đơn</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={locked}
+                          onClick={() => !locked && setFormData({ ...formData, autoAssignRoom: false })}
+                          className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                            !formData.autoAssignRoom
+                              ? 'border-emerald-500 bg-emerald-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          } ${locked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        >
+                          <span className={`text-sm font-semibold ${!formData.autoAssignRoom ? 'text-emerald-700' : 'text-slate-700'}`}>
+                            Xét duyệt theo ưu tiên
+                          </span>
+                          <span className="text-xs text-slate-500">Admin duyệt thủ công, xếp phòng theo điểm ưu tiên</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={locked}
+                          onClick={() => !locked && setFormData({ ...formData, autoAssignRoom: true, maxApplicationsPerStudent: 1 })}
+                          className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                            formData.autoAssignRoom
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          } ${locked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        >
+                          <span className={`text-sm font-semibold ${formData.autoAssignRoom ? 'text-blue-700' : 'text-slate-700'}`}>
+                            Duyệt tự động
+                          </span>
+                          <span className="text-xs text-slate-500">Được duyệt ngay khi nộp đơn, xếp phòng tự động</span>
+                        </button>
+                      </div>
+                      {locked && (
+                        <p className="text-xs text-amber-600 mt-1.5">
+                          Không thể thay đổi sau khi đợt đã mở hoặc đã có đơn đăng ký.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {!formData.autoAssignRoom && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Số nguyện vọng tối đa mỗi SV</label>
                     <input
-                      type="checkbox"
-                      checked={formData.allowRoomPreference}
-                      onChange={(e) => setFormData({ ...formData, allowRoomPreference: e.target.checked })}
-                      className="w-4 h-4 text-emerald-600 rounded border-slate-300"
+                      type="number"
+                      value={formData.maxApplicationsPerStudent}
+                      onChange={(e) => setFormData({ ...formData, maxApplicationsPerStudent: parseInt(e.target.value) || 1 })}
+                      min={1}
+                      max={5}
+                      className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg"
                     />
-                    <span className="text-sm text-slate-700">Cho phép chọn phòng ưu tiên</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.autoAssignRoom}
-                      onChange={(e) => setFormData({ ...formData, autoAssignRoom: e.target.checked })}
-                      className="w-4 h-4 text-emerald-600 rounded border-slate-300"
-                    />
-                    <span className="text-sm text-slate-700">Tự động xếp phòng</span>
-                  </label>
-                </div>
+                  </div>
+                )}
+
+                {/* Application type restriction */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Số đơn tối đa mỗi SV</label>
-                  <input
-                    type="number"
-                    value={formData.maxApplicationsPerStudent}
-                    onChange={(e) => setFormData({ ...formData, maxApplicationsPerStudent: parseInt(e.target.value) || 1 })}
-                    min={1}
-                    max={5}
-                    className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg"
-                  />
+                  <p className="text-xs font-medium text-slate-600 mb-2">Loại đơn được nhận</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: 'ALL', label: 'Tất cả', desc: 'Cả mới & gia hạn' },
+                      { value: 'NEW_ONLY', label: 'Chỉ mới', desc: 'Không nhận gia hạn' },
+                      { value: 'RENEWAL_ONLY', label: 'Chỉ gia hạn', desc: 'Không nhận mới' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, allowedTypes: opt.value })}
+                        className={`flex flex-col items-start gap-0.5 p-3 rounded-lg border-2 text-left transition-colors ${
+                          formData.allowedTypes === opt.value
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <span className={`text-sm font-semibold ${formData.allowedTypes === opt.value ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          {opt.label}
+                        </span>
+                        <span className="text-xs text-slate-500">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Building filter */}
+                {buildings.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-600 mb-1.5">
+                      Tòa nhà được đăng ký
+                      <span className="ml-1 font-normal text-slate-400">(để trống = tất cả)</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {buildings.map((b) => {
+                        const selected = formData.allowedBuildingIds.includes(b.id);
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => {
+                              const ids = selected
+                                ? formData.allowedBuildingIds.filter((id) => id !== b.id)
+                                : [...formData.allowedBuildingIds, b.id];
+                              setFormData({ ...formData, allowedBuildingIds: ids });
+                            }}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors ${
+                              selected
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                            }`}
+                          >
+                            {b.code} – {b.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">

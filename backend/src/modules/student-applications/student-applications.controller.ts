@@ -115,6 +115,21 @@ export class StudentApplicationsController {
 // ADMIN CONTROLLER
 // ========================================
 
+@ApiTags('Admin Dashboard')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller('admin')
+export class AdminDashboardController {
+  constructor(private readonly service: StudentApplicationsService) {}
+
+  @Get('dashboard')
+  @Roles('ADMIN', 'STAFF')
+  @ApiOperation({ summary: 'Tổng quan hệ thống cho admin' })
+  async getDashboard() {
+    return this.service.getAdminDashboard();
+  }
+}
+
 @ApiTags('Applications (Admin)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
