@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Settings,
   Building2,
+  ClipboardCheck,
 } from 'lucide-react';
 import { getStoredUser, clearAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { label: 'Hồ sơ cá nhân', href: '/student/profile', icon: User },
   { label: 'Đăng ký KTX', href: '/student/register', icon: ClipboardList },
   { label: 'Đơn đăng ký', href: '/student/applications', icon: FileText },
+  { label: 'Hướng dẫn nhận phòng', href: '/student/check-in-guide', icon: ClipboardCheck },
   { label: 'Hợp đồng', href: '/student/contracts', icon: FileSignature },
   { label: 'Hóa đơn', href: '/student/invoices', icon: Receipt },
   { label: 'Báo sự cố', href: '/student/tickets', icon: Wrench },

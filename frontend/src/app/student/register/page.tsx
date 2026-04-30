@@ -30,6 +30,7 @@ interface Room {
   availableSlots: number;
   pricePerMonth: number;
   gender: 'MALE' | 'FEMALE';
+  isCurrentRoom?: boolean;
 }
 
 interface PeriodInfo {
@@ -57,6 +58,7 @@ export default function RegisterKTXPage() {
 
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
   const [selectedRooms, setSelectedRooms] = useState<number[]>([]);
+  const [currentRoomId, setCurrentRoomId] = useState<number | null>(null);
 
   const steps = [
     { number: 1, label: 'Loại đăng ký' },
@@ -86,11 +88,8 @@ export default function RegisterKTXPage() {
         return;
       }
 
-      // For auto-assign periods: allow changing room — pre-select existing choice if any
       if (res.data.hasExistingApplication && isAutoAssign) {
         setExistingApplicationId(res.data.existingApplicationId ?? null);
-        const existingRoomId = res.data.existingApprovedRoomId;
-        if (existingRoomId) setSelectedRooms([existingRoomId]);
       }
 
       setPeriod({
@@ -101,10 +100,23 @@ export default function RegisterKTXPage() {
         allowedTypes: p.allowedTypes ?? 'ALL',
         autoAssignRoom: isAutoAssign,
       });
-      if (p.allowedTypes === 'NEW_ONLY') setApplicationType('NEW');
-      if (p.allowedTypes === 'RENEWAL_ONLY') setApplicationType('RENEWAL');
+      const hasContract = !!res.data.hasActiveContract;
+      setHasActiveContract(hasContract);
+      const cRoomId: number | null = res.data.currentRoomId ?? null;
+      setCurrentRoomId(cRoomId);
+      // Auto-select type based on student's current status, then override with period restriction
+      let autoType: ApplicationType = hasContract ? 'RENEWAL' : 'NEW';
+      if (p.allowedTypes === 'NEW_ONLY') autoType = 'NEW';
+      if (p.allowedTypes === 'RENEWAL_ONLY') autoType = 'RENEWAL';
+      setApplicationType(autoType);
       setAvailableRooms(rooms);
-      setHasActiveContract(!!res.data.hasActiveContract);
+      // Pre-select room: existing approved choice takes priority, then current room for RENEWAL.
+      // Only pre-select if the room is actually in the available list for this period
+      // (it may be absent when allowedBuildingIds restricts it to a different building).
+      const existingRoomId: number | null = res.data.existingApprovedRoomId ?? null;
+      const preSelect = existingRoomId ?? (autoType === 'RENEWAL' ? cRoomId : null);
+      const preSelectValid = preSelect !== null && rooms.some((r: { id: number }) => r.id === preSelect);
+      if (preSelectValid) setSelectedRooms([preSelect as number]);
     } catch (err) {
       setNoPeriod(true);
     } finally {
@@ -258,12 +270,14 @@ export default function RegisterKTXPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {period.allowedTypes !== 'RENEWAL_ONLY' && (
                 <button
-                  onClick={() => setApplicationType('NEW')}
-                  disabled={period.allowedTypes === 'RENEWAL_ONLY'}
+                  onClick={() => { setApplicationType('NEW'); setSelectedRooms([]); }}
+                  disabled={hasActiveContract || period.allowedTypes === 'RENEWAL_ONLY'}
                   className={`p-5 rounded-xl border-2 text-left transition-all ${
                     applicationType === 'NEW'
                       ? 'border-amber-500 bg-amber-50'
-                      : 'border-slate-200 hover:border-slate-300'
+                      : !hasActiveContract && period.allowedTypes !== 'RENEWAL_ONLY'
+                      ? 'border-slate-200 hover:border-slate-300'
+                      : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
                   }`}
                 >
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
@@ -278,7 +292,11 @@ export default function RegisterKTXPage() {
 
               {period.allowedTypes !== 'NEW_ONLY' && (
                 <button
-                  onClick={() => setApplicationType('RENEWAL')}
+                  onClick={() => {
+                    setApplicationType('RENEWAL');
+                    const inList = !!currentRoomId && availableRooms.some((r) => r.id === currentRoomId);
+                    setSelectedRooms(inList ? [currentRoomId!] : []);
+                  }}
                   disabled={!hasActiveContract}
                   className={`p-5 rounded-xl border-2 text-left transition-all ${
                     applicationType === 'RENEWAL'
@@ -334,9 +352,16 @@ export default function RegisterKTXPage() {
                           </span>
                         )}
                         <div className="flex-1">
-                          <span className="text-sm font-medium text-slate-800">
-                            {room.code} - {room.buildingName}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-800">
+                              {room.code} - {room.buildingName}
+                            </span>
+                            {room.isCurrentRoom && (
+                              <span className="px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 rounded-full">
+                                Phòng hiện tại
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-500">
                             Tầng {room.floor} • {room.roomType === 'AIR_CONDITIONED' ? 'Điều hòa' : 'Thường'} • Còn {room.availableSlots}/{room.capacity} chỗ • {formatCurrency(room.pricePerMonth)}
                           </p>
@@ -366,21 +391,33 @@ export default function RegisterKTXPage() {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {availableRooms
                     .filter((r) => !selectedRooms.includes(r.id) && r.availableSlots > 0)
+                    .sort((a, b) => (b.isCurrentRoom ? 1 : 0) - (a.isCurrentRoom ? 1 : 0))
                     .map((room) => (
                       <button
                         key={room.id}
                         onClick={() => handleRoomSelect(room.id)}
                         disabled={!period.autoAssignRoom && selectedRooms.length >= 3}
-                        className="w-full flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:border-amber-300 hover:bg-amber-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full flex items-center justify-between p-3 border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          room.isCurrentRoom
+                            ? 'border-emerald-300 bg-emerald-50 hover:border-emerald-400'
+                            : 'border-slate-200 hover:border-amber-300 hover:bg-amber-50'
+                        }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                            <Home className="w-5 h-5 text-slate-600" />
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${room.isCurrentRoom ? 'bg-emerald-100' : 'bg-slate-100'}`}>
+                            <Home className={`w-5 h-5 ${room.isCurrentRoom ? 'text-emerald-600' : 'text-slate-600'}`} />
                           </div>
                           <div className="text-left">
-                            <p className="text-sm font-medium text-slate-800">
-                              {room.code} - {room.buildingName}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-slate-800">
+                                {room.code} - {room.buildingName}
+                              </p>
+                              {room.isCurrentRoom && (
+                                <span className="px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 rounded-full">
+                                  Phòng hiện tại
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500">
                               Tầng {room.floor} • {room.roomType === 'AIR_CONDITIONED' ? 'Điều hòa' : 'Thường'} • Còn {room.availableSlots}/{room.capacity} chỗ
                             </p>
@@ -390,11 +427,11 @@ export default function RegisterKTXPage() {
                       </button>
                     ))}
                 </div>
-                {availableRooms.filter((r) => r.availableSlots === 0).length > 0 && (
+                {availableRooms.filter((r) => r.availableSlots === 0 && !r.isCurrentRoom).length > 0 && (
                   <div className="mt-3 space-y-1">
                     <p className="text-xs font-medium text-slate-500">ĐÃ HẾT CHỖ</p>
                     {availableRooms
-                      .filter((r) => r.availableSlots === 0)
+                      .filter((r) => r.availableSlots === 0 && !r.isCurrentRoom)
                       .map((room) => (
                         <div key={room.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-lg opacity-50">
                           <div className="flex items-center gap-3">
@@ -433,9 +470,16 @@ export default function RegisterKTXPage() {
                     {selectedRooms.map((roomId, index) => {
                       const room = availableRooms.find((r) => r.id === roomId);
                       return (
-                        <p key={roomId} className="text-sm text-slate-800">
-                          {index + 1}. {room?.code} - {room?.buildingName}
-                        </p>
+                        <div key={roomId} className="flex items-center gap-2">
+                          <p className="text-sm text-slate-800">
+                            {index + 1}. {room?.code} - {room?.buildingName}
+                          </p>
+                          {room?.isCurrentRoom && (
+                            <span className="px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 rounded-full">
+                              Phòng hiện tại
+                            </span>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
