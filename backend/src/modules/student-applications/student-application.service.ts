@@ -82,13 +82,15 @@ export class StudentApplicationsService {
       where: { id: studentId },
       select: {
         gender: true,
-        contracts: { where: { status: 'ACTIVE' }, take: 1, select: { id: true } },
+        contracts: { where: { status: 'ACTIVE' }, take: 1, select: { id: true, roomId: true } },
       },
     });
 
     if (!student) {
       throw new NotFoundException('Không tìm thấy sinh viên');
     }
+
+    const currentRoomId: number | null = student.contracts[0]?.roomId ?? null;
 
     const now = new Date();
 
@@ -197,7 +199,11 @@ export class StudentApplicationsService {
       },
       availableRooms: availableRooms.map((room) => {
         const reserved = reservationsByRoom.get(room.id) ?? 0;
-        const occupants = room._count.contracts + reserved;
+        const rawOccupants = room._count.contracts + reserved;
+        // For the student's current room, their own contract slot will be freed on renewal,
+        // so we show one extra available slot so they can select it.
+        const isCurrentRoom = room.id === currentRoomId;
+        const occupants = isCurrentRoom ? Math.max(0, rawOccupants - 1) : rawOccupants;
         return {
           id: room.id,
           code: room.code,
@@ -209,6 +215,7 @@ export class StudentApplicationsService {
           availableSlots: room.capacity - occupants,
           pricePerMonth: room.pricePerMonth,
           gender: room.gender,
+          isCurrentRoom,
         };
       }),
       hasExistingApplication: !!existingApplication,
@@ -216,6 +223,7 @@ export class StudentApplicationsService {
       existingApplicationStatus: existingApplication?.status ?? null,
       existingApprovedRoomId: (existingApplication as any)?.approvedRoomId ?? null,
       hasActiveContract: student.contracts.length > 0,
+      currentRoomId,
     };
   }
 
