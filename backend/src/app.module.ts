@@ -11,6 +11,8 @@ import { StudentApplicationsModule } from './modules/student-applications/studen
 import { CloudinaryModule } from './common/cloudinary/cloudinary.module';
 import { PriorityDocumentsModule } from './modules/priority-documents/priority-documents.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
+import { MetersModule } from './modules/meters/meters.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { ContractsModule } from './modules/contracts/contracts.module';
     StudentApplicationsModule,
     PriorityDocumentsModule,
     ContractsModule,
+    MetersModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}
