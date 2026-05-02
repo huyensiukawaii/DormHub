@@ -13,6 +13,7 @@ import { PriorityDocumentsModule } from './modules/priority-documents/priority-d
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { MetersModule } from './modules/meters/meters.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     ContractsModule,
     MetersModule,
     SettingsModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   Zap,
@@ -10,13 +10,12 @@ import {
   AlertCircle,
   CheckCircle,
   Save,
-  BarChart3,
-  ChevronDown,
   RefreshCw,
-  Building2,
-  X,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getStoredUser } from '@/lib/auth';
 
 type MeterType = 'ELECTRICITY' | 'WATER';
 
@@ -65,24 +64,37 @@ export default function MetersPage() {
   // Editable values
   const [editValues, setEditValues] = useState<Record<number, string>>({});
   const [saveResults, setSaveResults] = useState<Record<number, 'success' | 'error' | null>>({});
+  const [importSummary, setImportSummary] = useState<{ matched: number; notFound: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [buildingsReady, setBuildingsReady] = useState(false);
 
   useEffect(() => {
     fetchBuildings();
   }, []);
 
   useEffect(() => {
-    if (readingMonth) {
+    if (buildingsReady && readingMonth) {
       fetchRooms();
       fetchStats();
     }
-  }, [meterType, readingMonth, buildingId]);
+  }, [meterType, readingMonth, buildingId, buildingsReady]);
 
   const fetchBuildings = async () => {
     try {
       const res = await api.get('/buildings?status=ACTIVE&limit=50');
-      setBuildings(res.data.data || res.data);
+      const all: Building[] = res.data.data || res.data;
+      const currentUser = getStoredUser();
+      if (currentUser?.role === 'STAFF' && currentUser.assignedBuildingIds?.length) {
+        const allowed = all.filter((b) => currentUser.assignedBuildingIds!.includes(b.id));
+        setBuildings(allowed);
+        if (allowed.length > 0) setBuildingId(String(allowed[0].id));
+      } else {
+        setBuildings(all);
+      }
     } catch (err) {
       console.error(err);
+    } finally {
+      setBuildingsReady(true);
     }
   };
 
@@ -113,22 +125,104 @@ export default function MetersPage() {
 
   const fetchStats = async () => {
     try {
-      const res = await api.get(`/meters/stats?readingMonth=${readingMonth}-01`);
+      const params = new URLSearchParams({ readingMonth: `${readingMonth}-01` });
+      if (buildingId) params.append('buildingId', buildingId);
+      const res = await api.get(`/meters/stats?${params.toString()}`);
       setStats(res.data);
     } catch (err) {
       console.error(err);
     }
   };
 
+  // ─── Excel: Tải mẫu ──────────────────────────────────────────────────────
+  const handleDownloadTemplate = async () => {
+    const XLSX = await import('xlsx');
+    const headers = ['STT', 'Mã phòng', 'Tòa', 'Tầng', 'Chỉ số trước', 'Chỉ số hiện tại'];
+    const data = rooms.map((r, i) => [
+      i + 1,
+      r.roomCode,
+      r.buildingCode,
+      r.floor,
+      r.previousReading,
+      r.currentReading ?? '',
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 12 }, { wch: 8 },
+      { wch: 8 }, { wch: 16 }, { wch: 18 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ghi chỉ số');
+    const label = meterType === 'ELECTRICITY' ? 'dien' : 'nuoc';
+    XLSX.writeFile(wb, `cong-to-${label}-${readingMonth}.xlsx`);
+  };
+
+  // ─── Excel: Import ────────────────────────────────────────────────────────
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const XLSX = await import('xlsx');
+    const buffer = await file.arrayBuffer();
+    try {
+        const data = new Uint8Array(buffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        // Cột 1 = Mã phòng, cột 5 = Chỉ số hiện tại (theo template)
+        const roomMap = new Map(rooms.map((r) => [r.roomCode, r.roomId]));
+        const newEditValues: Record<number, string> = {};
+        const notFound: string[] = [];
+        let matched = 0;
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const roomCode = String(row[1] ?? '').trim();
+          const rawValue = row[5];
+          if (!roomCode) continue;
+
+          const roomId = roomMap.get(roomCode);
+          if (roomId === undefined) {
+            notFound.push(roomCode);
+            continue;
+          }
+
+          if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+            const value = parseFloat(String(rawValue));
+            if (!isNaN(value)) {
+              newEditValues[roomId] = String(value);
+              matched++;
+            }
+          }
+        }
+
+        setEditValues((prev) => ({ ...prev, ...newEditValues }));
+        setImportSummary({ matched, notFound });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setTimeout(() => setImportSummary(null), 10000);
+    } catch {
+      alert('Không thể đọc file. Vui lòng dùng đúng mẫu Excel đã tải về.');
+    }
+  };
+
+  const isRoomReadingValid = (room: RoomForReading) => {
+    const value = editValues[room.roomId];
+    if (!value || value.trim() === '') return false;
+    const current = parseFloat(value);
+    if (isNaN(current)) return false;
+    return current >= room.previousReading;
+  };
+
   const handleSaveAll = async () => {
-    // Lọc phòng chưa ghi & có giá trị nhập
     const toSave = rooms
-      .filter((r) => !r.hasReading && editValues[r.roomId] && editValues[r.roomId].trim() !== '')
+      .filter((r) => !r.hasReading && isRoomReadingValid(r))
       .map((r) => ({
         roomId: r.roomId,
         currentReading: parseFloat(editValues[r.roomId]),
-      }))
-      .filter((r) => !isNaN(r.currentReading));
+      }));
 
     if (toSave.length === 0) {
       alert('Không có phòng nào cần ghi');
@@ -254,7 +348,7 @@ export default function MetersPage() {
             onChange={(e) => setBuildingId(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
           >
-            <option value="">Tất cả tòa nhà</option>
+            {getStoredUser()?.role !== 'STAFF' && <option value="">Tất cả tòa nhà</option>}
             {buildings.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
@@ -279,8 +373,61 @@ export default function MetersPage() {
           >
             <RefreshCw className="w-4 h-4 text-slate-500" />
           </button>
+
+          <div className="h-5 w-px bg-slate-200" />
+
+          {/* Excel actions */}
+          <button
+            onClick={handleDownloadTemplate}
+            disabled={rooms.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 rounded-lg transition-colors"
+            title="Tải file Excel mẫu để điền chỉ số"
+          >
+            <Download className="w-4 h-4" />
+            Tải mẫu
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors"
+            title="Import chỉ số từ file Excel"
+          >
+            <Upload className="w-4 h-4" />
+            Import Excel
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImportExcel}
+            className="hidden"
+          />
         </div>
       </div>
+
+      {/* Import result banner */}
+      {importSummary && (
+        <div className={`mb-4 flex items-start gap-3 p-3 rounded-lg border text-sm ${
+          importSummary.notFound.length > 0
+            ? 'bg-amber-50 border-amber-200 text-amber-800'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+        }`}>
+          {importSummary.notFound.length > 0
+            ? <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            : <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+          <div>
+            <p className="font-medium">
+              Đã import {importSummary.matched} phòng thành công.
+            </p>
+            {importSummary.notFound.length > 0 && (
+              <p className="text-xs mt-0.5">
+                Không tìm thấy: {importSummary.notFound.join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       {stats && (
@@ -335,17 +482,27 @@ export default function MetersPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-fixed min-w-[700px]">
+                <colgroup>
+                  <col className="w-[160px]" />
+                  <col className="w-16" />
+                  <col className="w-20" />
+                  <col className="w-28" />
+                  <col className="w-40" />
+                  <col className="w-32" />
+                  <col className="w-14" />
+                  <col className="w-14" />
+                </colgroup>
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase px-4 py-3">Phòng</th>
                     <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">Tòa</th>
                     <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">Số người</th>
                     <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">Chỉ số trước</th>
-                    <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3 w-40">Chỉ số hiện tại</th>
+                    <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">Chỉ số hiện tại</th>
                     <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">Tiêu thụ</th>
-                    <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">TT</th>
-                    <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3 w-20"></th>
+                    <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3">Trạng thái</th>
+                    <th className="w-14"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -448,7 +605,7 @@ export default function MetersPage() {
                   }`}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Lưu tất cả ({Object.values(editValues).filter((v) => v.trim() !== '').length - recordedCount} phòng)
+                  Lưu tất cả ({rooms.filter((r) => !r.hasReading && isRoomReadingValid(r)).length} phòng)
                 </button>
               </div>
             )}

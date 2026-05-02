@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ContractsService } from './contracts.service';
+import { getAllowedBuildingIds, assertAllowed } from '@/common/utils/building-access';
 import {
   CreateContractDto,
   CreateContractFromApplicationDto,
@@ -45,22 +46,24 @@ export class AdminContractsController {
   @Get()
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Danh sách hợp đồng' })
-  async findAll(@Query() query: QueryContractDto) {
-    return this.service.findAll(query);
+  async findAll(@Query() query: QueryContractDto, @Request() req: any) {
+    return this.service.findAll(query, getAllowedBuildingIds(req.user));
   }
 
   @Get('room/:roomId')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Xem ai ở trong phòng' })
-  async getRoomContracts(@Param('roomId', ParseIntPipe) roomId: number) {
-    return this.service.getRoomContracts(roomId);
+  async getRoomContracts(@Param('roomId', ParseIntPipe) roomId: number, @Request() req: any) {
+    return this.service.getRoomContracts(roomId, getAllowedBuildingIds(req.user));
   }
 
   @Get(':id')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Chi tiết hợp đồng' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const contract = await this.service.findOne(id);
+    assertAllowed(getAllowedBuildingIds(req.user), contract.room.buildingId);
+    return contract;
   }
 
   @Post()
@@ -86,8 +89,9 @@ export class AdminContractsController {
   async checkIn(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CheckInDto,
+    @Request() req: any,
   ) {
-    return this.service.checkIn(id, dto);
+    return this.service.checkIn(id, dto, getAllowedBuildingIds(req.user));
   }
 
   @Patch(':id/check-out')
@@ -96,8 +100,9 @@ export class AdminContractsController {
   async checkOut(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CheckOutDto,
+    @Request() req: any,
   ) {
-    return this.service.checkOut(id, dto);
+    return this.service.checkOut(id, dto, getAllowedBuildingIds(req.user));
   }
 
   @Patch(':id/terminate')
@@ -116,8 +121,9 @@ export class AdminContractsController {
   async setRoomLeader(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SetRoomLeaderDto,
+    @Request() req: any,
   ) {
-    return this.service.setRoomLeader(id, dto);
+    return this.service.setRoomLeader(id, dto, getAllowedBuildingIds(req.user));
   }
 }
 

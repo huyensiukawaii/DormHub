@@ -81,14 +81,15 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
+      setError('');
       const res = await api.get('/settings/all');
       const map: Record<string, string> = {};
       (res.data as Setting[]).forEach((s) => {
         map[s.key] = s.value;
       });
       setSettings(map);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể tải cài đặt. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }

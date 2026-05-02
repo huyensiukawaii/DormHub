@@ -508,7 +508,7 @@ export class StudentApplicationsService {
   // ========================================
   // GET ALL APPLICATIONS (Admin)
   // ========================================
-  async findAll(query: QueryApplicationDto): Promise<PaginatedApplicationResponseDto> {
+  async findAll(query: QueryApplicationDto, allowedBuildingIds?: number[]): Promise<PaginatedApplicationResponseDto> {
     const {
       page = 1,
       limit = 10,
@@ -525,7 +525,7 @@ export class StudentApplicationsService {
 
     if (periodId) where.periodId = periodId;
     if (status) where.status = status;
-    if (applicationType) where.type = applicationType; // schema field is "type"
+    if (applicationType) where.type = applicationType;
     if (search) {
       where.student = {
         OR: [
@@ -533,6 +533,13 @@ export class StudentApplicationsService {
           { fullName: { contains: search, mode: 'insensitive' } },
         ],
       };
+    }
+    if (allowedBuildingIds !== undefined) {
+      // Match applications whose approved room OR any room choice belongs to an assigned building
+      where.OR = [
+        { approvedRoom: { buildingId: { in: allowedBuildingIds } } },
+        { roomChoices: { some: { room: { buildingId: { in: allowedBuildingIds } } } } },
+      ];
     }
 
     let orderBy: any = {};
@@ -567,7 +574,7 @@ export class StudentApplicationsService {
   // ========================================
   // UPDATE STATUS (Admin)
   // ========================================
-  async updateStatus(id: number, dto: UpdateApplicationStatusDto, reviewerId: number) {
+  async updateStatus(id: number, dto: UpdateApplicationStatusDto, reviewerId: number, allowedBuildingIds?: number[]) {
     const application = await this.prisma.registrationApplication.findUnique({
       where: { id },
       include: { period: true, student: { select: { gender: true } } },
@@ -606,6 +613,9 @@ export class StudentApplicationsService {
 
       if (!room) {
         throw new NotFoundException('Phòng không tồn tại');
+      }
+      if (allowedBuildingIds !== undefined && !allowedBuildingIds.includes(room.buildingId)) {
+        throw new ForbiddenException('Phòng không thuộc tòa nhà bạn được phân quyền');
       }
       if (room.gender !== (application as any).student.gender) {
         throw new BadRequestException('Phòng không phù hợp giới tính sinh viên');
@@ -907,7 +917,7 @@ export class StudentApplicationsService {
   // ========================================
   // GET AVAILABLE ROOMS FOR APPROVAL (Admin)
   // ========================================
-  async getAvailableRoomsForApproval(applicationId: number) {
+  async getAvailableRoomsForApproval(applicationId: number, allowedBuildingIds?: number[]) {
     const app = await this.prisma.registrationApplication.findUnique({
       where: { id: applicationId },
       include: {
@@ -918,11 +928,13 @@ export class StudentApplicationsService {
 
     if (!app) throw new NotFoundException('Không tìm thấy đơn đăng ký');
 
+    const roomWhere: any = { gender: app.student.gender, status: 'ACTIVE' };
+    if (allowedBuildingIds !== undefined) {
+      roomWhere.buildingId = { in: allowedBuildingIds };
+    }
+
     const rooms = await this.prisma.room.findMany({
-      where: {
-        gender: app.student.gender,
-        status: 'ACTIVE',
-      },
+      where: roomWhere,
       include: {
         building: true,
         contracts: {

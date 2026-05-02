@@ -27,6 +27,7 @@ import {
   Crown,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getStoredUser } from '@/lib/auth';
 
 interface Room {
   id: number;
@@ -84,6 +85,8 @@ export default function RoomDetailPage() {
   const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const isAdmin = getStoredUser()?.role === 'ADMIN';
 
   // Action menu
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
@@ -289,13 +292,15 @@ export default function RoomDetailPage() {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => router.push(`/rooms?edit=${room.id}`)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors"
-        >
-          <Pencil className="w-4 h-4" />
-          Chỉnh sửa
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => router.push(`/rooms?edit=${room.id}`)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+            Chỉnh sửa
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

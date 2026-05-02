@@ -124,7 +124,8 @@ export class SettingsService {
   async getNumber(key: string, defaultValue: number = 0): Promise<number> {
     try {
       const setting = await this.findByKey(key);
-      return parseFloat(setting.value) || defaultValue;
+      const parsed = parseFloat(setting.value);
+      return Number.isNaN(parsed) ? defaultValue : parsed;
     } catch {
       return defaultValue;
     }
@@ -150,7 +151,7 @@ export class SettingsService {
     let remaining = kWh;
     let totalCost = 0;
     let prevLimit = 0;
-    const breakdown: any[] = [];
+    const breakdown: { tier: number; range: string; kWh: number; price: number; cost: number }[] = [];
 
     for (const tier of tiers) {
       if (remaining <= 0) break;

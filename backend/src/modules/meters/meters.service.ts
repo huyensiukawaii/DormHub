@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -173,9 +174,6 @@ export class MetersService {
   // BATCH CREATE
   // ========================================
   async batchCreate(dto: BatchCreateMeterReadingDto, recordedById: number) {
-    const monthDate = new Date(dto.readingMonth);
-    monthDate.setDate(1);
-
     const results: { roomId: number; success: boolean; error?: string }[] = [];
 
     for (const item of dto.readings) {
@@ -254,7 +252,7 @@ export class MetersService {
   // ========================================
   // FIND ALL (Paginated)
   // ========================================
-  async findAll(query: QueryMeterReadingDto) {
+  async findAll(query: QueryMeterReadingDto, allowedBuildingIds?: number[]) {
     const {
       page = 1, limit = 20, roomId, buildingId, meterType,
       readingMonth, search, sortBy = 'readingMonth', sortOrder = 'desc',
@@ -264,7 +262,16 @@ export class MetersService {
     const where: any = {};
 
     if (roomId) where.roomId = roomId;
-    if (buildingId) where.room = { buildingId };
+
+    if (allowedBuildingIds !== undefined) {
+      const scope = buildingId
+        ? allowedBuildingIds.filter((id) => id === Number(buildingId))
+        : allowedBuildingIds;
+      where.room = { buildingId: { in: scope } };
+    } else if (buildingId) {
+      where.room = { buildingId };
+    }
+
     if (meterType) where.meterType = meterType;
     if (readingMonth) {
       const d = new Date(readingMonth);
@@ -338,6 +345,7 @@ export class MetersService {
       room: {
         id: room.id,
         code: room.code,
+        buildingId: room.buildingId,
         buildingName: room.building.name,
       },
       readings,
@@ -345,40 +353,64 @@ export class MetersService {
   }
 
   // ========================================
+  // BUILDING ACCESS HELPERS (for controller guards)
+  // ========================================
+  async assertRoomBuildingAccess(roomId: number, allowedBuildingIds: number[]): Promise<void> {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: { buildingId: true },
+    });
+    if (!room || !allowedBuildingIds.includes(room.buildingId)) {
+      throw new ForbiddenException('Bạn không có quyền truy cập dữ liệu của tòa này');
+    }
+  }
+
+  async assertReadingBuildingAccess(readingId: number, allowedBuildingIds: number[]): Promise<void> {
+    const reading = await this.prisma.meterReading.findUnique({
+      where: { id: readingId },
+      select: { room: { select: { buildingId: true } } },
+    });
+    if (!reading || !allowedBuildingIds.includes(reading.room.buildingId)) {
+      throw new ForbiddenException('Bạn không có quyền truy cập dữ liệu của tòa này');
+    }
+  }
+
+  // ========================================
   // STATS (Thống kê tháng)
   // ========================================
-  async getMonthlyStats(readingMonth: string) {
+  async getMonthlyStats(readingMonth: string, buildingId?: number) {
     const monthDate = new Date(readingMonth);
     monthDate.setDate(1);
 
+    const roomScope: any = { status: 'ACTIVE', contracts: { some: { status: 'ACTIVE' } } };
+    if (buildingId) roomScope.buildingId = buildingId;
+
+    const readingScope: any = { readingMonth: monthDate };
+    if (buildingId) readingScope.room = { buildingId };
+
     // Tổng phòng đang hoạt động có người
-    const totalOccupiedRooms = await this.prisma.room.count({
-      where: {
-        status: 'ACTIVE',
-        contracts: { some: { status: 'ACTIVE' } },
-      },
-    });
+    const totalOccupiedRooms = await this.prisma.room.count({ where: roomScope });
 
     // Đã ghi điện
     const elecRecorded = await this.prisma.meterReading.count({
-      where: { meterType: 'ELECTRICITY', readingMonth: monthDate },
+      where: { ...readingScope, meterType: 'ELECTRICITY' },
     });
 
     // Đã ghi nước
     const waterRecorded = await this.prisma.meterReading.count({
-      where: { meterType: 'WATER', readingMonth: monthDate },
+      where: { ...readingScope, meterType: 'WATER' },
     });
 
     // Tổng tiêu thụ
     const elecAgg = await this.prisma.meterReading.aggregate({
-      where: { meterType: 'ELECTRICITY', readingMonth: monthDate },
+      where: { ...readingScope, meterType: 'ELECTRICITY' },
       _sum: { consumption: true },
       _avg: { consumption: true },
       _max: { consumption: true },
     });
 
     const waterAgg = await this.prisma.meterReading.aggregate({
-      where: { meterType: 'WATER', readingMonth: monthDate },
+      where: { ...readingScope, meterType: 'WATER' },
       _sum: { consumption: true },
       _avg: { consumption: true },
       _max: { consumption: true },

@@ -29,12 +29,15 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
+  adminOnly?: boolean;
+  staffLabel?: string; // label override for STAFF role
 }
 
 interface NavGroup {
   key: string;
   label: string;
   items: NavItem[];
+  adminOnly?: boolean;
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -70,7 +73,8 @@ const NAV_GROUPS: NavGroup[] = [
     key: 'hethong',
     label: 'Hệ thống',
     items: [
-      { label: 'Cài đặt', href: '/settings', icon: Settings },
+      { label: 'Nhân viên', href: '/staff', icon: Users, staffLabel: 'Tòa của tôi' },
+      { label: 'Cài đặt', href: '/settings', icon: Settings, adminOnly: true },
     ],
   },
 ];
@@ -99,7 +103,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(getInitialCollapsed);
 
-  // Cập nhật lại khi đổi trang
+  // Ensure the active group is always expanded on navigation
   useEffect(() => {
     setCollapsed((prev) => {
       const next = { ...prev };
@@ -206,8 +210,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
           {/* Grouped nav */}
           {NAV_GROUPS.map((group) => {
+            const isAdmin = user?.role === 'ADMIN';
+            const visibleItems = group.items.filter((item) => !item.adminOnly || isAdmin);
+            if (visibleItems.length === 0) return null;
+
             const isOpen = !collapsed[group.key];
-            const hasActiveItem = group.items.some((item) => isActive(item.href));
+            const hasActiveItem = visibleItems.some((item) => isActive(item.href));
 
             return (
               <div key={group.key} className="mt-1">
@@ -229,9 +237,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 {/* Group items */}
                 {isOpen && (
                   <ul className="mt-0.5 space-y-0.5">
-                    {group.items.map((item) => {
+                    {visibleItems.map((item) => {
                       const Icon = item.icon;
                       const active = isActive(item.href);
+                      const label = (!isAdmin && item.staffLabel) ? item.staffLabel : item.label;
                       return (
                         <li key={item.href}>
                           <Link
@@ -244,7 +253,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             }`}
                           >
                             <Icon className={`w-[17px] h-[17px] flex-shrink-0 ${active ? 'text-emerald-400' : ''}`} />
-                            <span>{item.label}</span>
+                            <span>{label}</span>
                           </Link>
                         </li>
                       );
