@@ -6,6 +6,7 @@ import {
   ConflictException,
   OnModuleInit,
 } from '@nestjs/common';
+import { assertAllowed } from '@/common/utils/building-access';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
@@ -23,7 +24,19 @@ export class ContractsService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
 
   async onModuleInit() {
-    await this.autoExpireContracts();
+    // Retry up to 3 times with exponential delay — Neon pooler may close the connection at cold start
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await this.autoExpireContracts();
+        return;
+      } catch (err: any) {
+        if (attempt === 3 || err?.code !== 'P1017') {
+          console.error('[onModuleInit] autoExpireContracts failed:', err?.message ?? err);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
   }
 
   // ========================================
@@ -225,7 +238,7 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   // FIND ALL (ADMIN - Paginated)
   // ========================================
-  async findAll(query: QueryContractDto) {
+  async findAll(query: QueryContractDto, allowedBuildingIds?: number[]) {
     const {
       page = 1,
       limit = 10,
@@ -253,7 +266,16 @@ export class ContractsService implements OnModuleInit {
     if (status) where.status = status;
     if (studentId) where.studentId = studentId;
     if (roomId) where.roomId = roomId;
-    if (buildingId) where.room = { buildingId };
+
+    if (allowedBuildingIds !== undefined) {
+      const scope = buildingId
+        ? allowedBuildingIds.filter((id) => id === Number(buildingId))
+        : allowedBuildingIds;
+      where.room = { buildingId: { in: scope } };
+    } else if (buildingId) {
+      where.room = { buildingId };
+    }
+
     if (notCheckedIn) where.checkedInAt = null;
 
     const orderBy: any = {};
@@ -417,9 +439,13 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   // CHECK-IN
   // ========================================
-  async checkIn(id: number, dto: CheckInDto) {
-    const contract = await this.prisma.contract.findUnique({ where: { id } });
+  async checkIn(id: number, dto: CheckInDto, allowedBuildingIds?: number[]) {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { room: { select: { buildingId: true } } },
+    });
     if (!contract) throw new NotFoundException('Không tìm thấy hợp đồng');
+    assertAllowed(allowedBuildingIds, contract.room.buildingId);
     if (contract.status !== 'ACTIVE') {
       throw new BadRequestException('Chỉ có thể check-in hợp đồng đang ACTIVE');
     }
@@ -440,9 +466,13 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   // CHECK-OUT
   // ========================================
-  async checkOut(id: number, dto: CheckOutDto) {
-    const contract = await this.prisma.contract.findUnique({ where: { id } });
+  async checkOut(id: number, dto: CheckOutDto, allowedBuildingIds?: number[]) {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { room: { select: { buildingId: true } } },
+    });
     if (!contract) throw new NotFoundException('Không tìm thấy hợp đồng');
+    assertAllowed(allowedBuildingIds, contract.room.buildingId);
     if (contract.status !== 'ACTIVE') {
       throw new BadRequestException('Chỉ có thể check-out hợp đồng đang ACTIVE');
     }
@@ -487,9 +517,13 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   // SET ROOM LEADER
   // ========================================
-  async setRoomLeader(id: number, dto: SetRoomLeaderDto) {
-    const contract = await this.prisma.contract.findUnique({ where: { id } });
+  async setRoomLeader(id: number, dto: SetRoomLeaderDto, allowedBuildingIds?: number[]) {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { room: { select: { buildingId: true } } },
+    });
     if (!contract) throw new NotFoundException('Không tìm thấy hợp đồng');
+    assertAllowed(allowedBuildingIds, contract.room.buildingId);
     if (contract.status !== 'ACTIVE') {
       throw new BadRequestException('Chỉ đặt trưởng phòng cho hợp đồng ACTIVE');
     }
@@ -519,12 +553,13 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   // GET ROOM CONTRACTS (Xem ai ở trong phòng)
   // ========================================
-  async getRoomContracts(roomId: number) {
+  async getRoomContracts(roomId: number, allowedBuildingIds?: number[]) {
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
       include: { building: true },
     });
     if (!room) throw new NotFoundException('Không tìm thấy phòng');
+    assertAllowed(allowedBuildingIds, room.buildingId);
 
     const contracts = await this.prisma.contract.findMany({
       where: { roomId, status: 'ACTIVE' },
@@ -589,20 +624,17 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async autoExpireContracts() {
-    const now = new Date();
-
-    const result = await this.prisma.contract.updateMany({
-      where: {
-        status: 'ACTIVE',
-        endDate: { lt: now },
-      },
-      data: {
-        status: 'EXPIRED',
-      },
-    });
-
-    if (result.count > 0) {
-      console.log(`[CRON] Auto-expired ${result.count} contracts`);
+    try {
+      const now = new Date();
+      const result = await this.prisma.contract.updateMany({
+        where: { status: 'ACTIVE', endDate: { lt: now } },
+        data: { status: 'EXPIRED' },
+      });
+      if (result.count > 0) {
+        console.log(`[CRON] Auto-expired ${result.count} contracts`);
+      }
+    } catch (err: any) {
+      console.error('[CRON] autoExpireContracts error:', err?.message ?? err);
     }
   }
 }

@@ -44,7 +44,10 @@ export class AuthService {
           mode: 'insensitive',
         },
       },
-      include: { student: true },
+      include: {
+        student: true,
+        assignedBuildings: { select: { buildingId: true } },
+      },
     });
 
     // Tách riêng: tài khoản bị khóa vs email không tồn tại
@@ -74,6 +77,7 @@ export class AuthService {
         role: user.role,
         studentCode: user.student?.studentCode ?? '',
         mustChangePassword: user.mustChangePassword,
+        assignedBuildingIds: user.assignedBuildings.map((b) => b.buildingId),
       },
     };
   }
@@ -133,7 +137,8 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         studentCode: dto.studentCode,
-        mustChangePassword: false, // tự đăng ký = tự chọn mật khẩu, không cần nhắc
+        mustChangePassword: false,
+        assignedBuildingIds: [],
       },
     };
   }

@@ -11,7 +11,9 @@ import {
   ParseIntPipe,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
+import { getAllowedBuildingIds } from '@/common/utils/building-access';
 import {
   ApiTags,
   ApiOperation,
@@ -130,6 +132,20 @@ export class AdminDashboardController {
   }
 }
 
+// An application belongs to STAFF's scope if any of its room choices or approved room
+// is in one of the STAFF's assigned buildings.
+function assertAppBuildingAccess(allowed: number[] | undefined, app: any): void {
+  if (allowed === undefined) return;
+  const buildingIds: number[] = [
+    ...(app.roomChoices ?? []).map((c: any) => c.room?.buildingId).filter(Boolean),
+    app.approvedRoom?.buildingId,
+  ].filter((id): id is number => typeof id === 'number');
+
+  if (buildingIds.length === 0 || !buildingIds.some((id) => allowed.includes(id))) {
+    throw new ForbiddenException('Bạn không có quyền truy cập đơn đăng ký này');
+  }
+}
+
 @ApiTags('Applications (Admin)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -140,29 +156,36 @@ export class AdminApplicationsController {
   @Get()
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Lấy danh sách tất cả đơn đăng ký' })
-  async findAll(@Query() query: QueryApplicationDto) {
-    return this.service.findAll(query);
+  async findAll(@Query() query: QueryApplicationDto, @Request() req: any) {
+    return this.service.findAll(query, getAllowedBuildingIds(req.user));
   }
 
   @Get(':id/detail')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Chi tiết đầy đủ đơn đăng ký' })
-  async findOneDetail(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOneDetail(id);
+  async findOneDetail(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const app = await this.service.findOneDetail(id);
+    assertAppBuildingAccess(getAllowedBuildingIds(req.user), app);
+    return app;
   }
 
   @Get(':id/available-rooms')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Phòng khả dụng để duyệt đơn' })
-  async getAvailableRoomsForApproval(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getAvailableRoomsForApproval(id);
+  async getAvailableRoomsForApproval(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const allowed = getAllowedBuildingIds(req.user);
+    const app = await this.service.findOne(id);
+    assertAppBuildingAccess(allowed, app);
+    return this.service.getAvailableRoomsForApproval(id, allowed);
   }
 
   @Get(':id')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Xem chi tiết đơn đăng ký' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const app = await this.service.findOne(id);
+    assertAppBuildingAccess(getAllowedBuildingIds(req.user), app);
+    return app;
   }
 
   @Patch(':id/status')
@@ -175,6 +198,9 @@ export class AdminApplicationsController {
     @Body() dto: UpdateApplicationStatusDto,
     @Request() req: any,
   ) {
-    return this.service.updateStatus(id, dto, req.user.id);
+    const allowed = getAllowedBuildingIds(req.user);
+    const app = await this.service.findOne(id);
+    assertAppBuildingAccess(allowed, app);
+    return this.service.updateStatus(id, dto, req.user.id, allowed);
   }
 }

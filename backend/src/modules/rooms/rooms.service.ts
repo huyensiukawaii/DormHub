@@ -6,7 +6,7 @@ import { CreateRoomDto, UpdateRoomDto, RoomQueryDto } from './dto/room.dto';
 export class RoomsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: RoomQueryDto) {
+  async findAll(query: RoomQueryDto, allowedBuildingIds?: number[]) {
     const { search, buildingId, floor, roomType, gender, status, hasAvailable } = query;
 
     const where: any = {};
@@ -14,7 +14,15 @@ export class RoomsService {
     if (search) {
       where.code = { contains: search, mode: 'insensitive' };
     }
-    if (buildingId) where.buildingId = buildingId;
+    if (allowedBuildingIds !== undefined) {
+      // STAFF scope: intersect with client-supplied filter if any
+      const scope = buildingId
+        ? allowedBuildingIds.filter((id) => id === Number(buildingId))
+        : allowedBuildingIds;
+      where.buildingId = { in: scope };
+    } else if (buildingId) {
+      where.buildingId = buildingId;
+    }
     if (floor) where.floor = floor;
     if (roomType) where.roomType = roomType;
     if (gender) where.gender = gender;
@@ -118,6 +126,7 @@ export class RoomsService {
       pricePerMonth: room.pricePerMonth,
       status: room.status,
       description: room.description,
+      buildingId: room.buildingId,
       building: room.building,
       occupiedCount: room.contracts.length,
       availableCount: room.capacity - room.contracts.length,

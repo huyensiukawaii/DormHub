@@ -7,6 +7,7 @@ export interface User {
   role: 'ADMIN' | 'STAFF' | 'STUDENT';
   studentCode?: string;
   mustChangePassword?: boolean;
+  assignedBuildingIds?: number[];
 }
 
 export interface LoginData {

@@ -6,10 +6,14 @@ import { CreateBuildingDto, UpdateBuildingDto, BuildingQueryDto } from './dto/bu
 export class BuildingsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: BuildingQueryDto) {
+  async findAll(query: BuildingQueryDto, allowedBuildingIds?: number[]) {
     const { search, status } = query;
 
     const where: any = {};
+
+    if (allowedBuildingIds !== undefined) {
+      where.id = { in: allowedBuildingIds };
+    }
 
     if (search) {
       where.OR = [

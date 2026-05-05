@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   Search,
@@ -51,6 +51,7 @@ type RoomFormData = {
 
 export default function RoomsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +92,16 @@ export default function RoomsPage() {
     setUserRole(getStoredUser()?.role ?? null);
   }, []);
 
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || rooms.length === 0 || userRole !== 'ADMIN') return;
+    const room = rooms.find((r) => r.id === parseInt(editId));
+    if (room) {
+      openEditModal(room);
+      router.replace('/rooms');
+    }
+  }, [searchParams, rooms, userRole]);
+
   const isStaff = userRole === 'STAFF';
 
   const fetchData = async () => {
@@ -101,7 +112,13 @@ export default function RoomsPage() {
         api.get('/buildings'),
       ]);
       setRooms(roomsRes.data);
-      setBuildings(buildingsRes.data);
+      const allBuildings: Building[] = buildingsRes.data;
+      const currentUser = getStoredUser();
+      if (currentUser?.role === 'STAFF' && currentUser.assignedBuildingIds?.length) {
+        setBuildings(allBuildings.filter((b) => currentUser.assignedBuildingIds!.includes(b.id)));
+      } else {
+        setBuildings(allBuildings);
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Không thể tải dữ liệu');
     } finally {

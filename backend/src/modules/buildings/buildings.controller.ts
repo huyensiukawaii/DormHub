@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BuildingsService } from './buildings.service';
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@/modules/auth/guards/roles.guard';
 import { Roles } from '@/modules/auth/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { getAllowedBuildingIds, assertBuildingAccess } from '@/common/utils/building-access';
 
 @ApiTags('Buildings')
 @Controller('buildings')
@@ -27,13 +29,14 @@ export class BuildingsController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách tòa nhà' })
-  async findAll(@Query() query: BuildingQueryDto) {
-    return this.buildingsService.findAll(query);
+  async findAll(@Query() query: BuildingQueryDto, @Request() req: any) {
+    return this.buildingsService.findAll(query, getAllowedBuildingIds(req.user));
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết tòa nhà' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    assertBuildingAccess(req.user, id);
     return this.buildingsService.findOne(id);
   }
 

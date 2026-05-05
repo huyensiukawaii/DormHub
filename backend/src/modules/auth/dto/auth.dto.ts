@@ -77,5 +77,6 @@ export class AuthResponseDto {
     role: UserRole;
     studentCode: string;
     mustChangePassword: boolean;
+    assignedBuildingIds: number[];
   };
 }

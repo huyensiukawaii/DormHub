@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RoomsService } from './rooms.service';
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@/modules/auth/guards/roles.guard';
 import { Roles } from '@/modules/auth/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { getAllowedBuildingIds, assertBuildingAccess } from '@/common/utils/building-access';
 
 @ApiTags('Rooms')
 @Controller('rooms')
@@ -27,14 +29,16 @@ export class RoomsController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách phòng' })
-  async findAll(@Query() query: RoomQueryDto) {
-    return this.roomsService.findAll(query);
+  async findAll(@Query() query: RoomQueryDto, @Request() req: any) {
+    return this.roomsService.findAll(query, getAllowedBuildingIds(req.user));
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết phòng' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.roomsService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    const room = await this.roomsService.findOne(id);
+    assertBuildingAccess(req.user, room.buildingId);
+    return room;
   }
 
   @Post()

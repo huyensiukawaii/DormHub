@@ -58,7 +58,7 @@ export class StudentsController {
   // EXPORT TO CSV
   // ========================================
   @Get('export')
-  @Roles('ADMIN', 'STAFF')
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'Xuất danh sách sinh viên ra CSV' })
   @ApiResponse({ status: 200, description: 'File CSV' })
   async export(@Res() res: Response) {
@@ -100,7 +100,7 @@ export class StudentsController {
   // CREATE STUDENT
   // ========================================
   @Post()
-  @Roles('ADMIN', 'STAFF')
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'Thêm sinh viên mới' })
   @ApiResponse({ status: 201, description: 'Sinh viên đã được tạo' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
@@ -113,7 +113,7 @@ export class StudentsController {
   // IMPORT FROM CSV
   // ========================================
   @Post('import')
-  @Roles('ADMIN', 'STAFF')
+  @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Import danh sách sinh viên từ CSV' })
   @ApiConsumes('multipart/form-data')
@@ -175,7 +175,7 @@ export class StudentsController {
   // UPDATE STUDENT
   // ========================================
   @Put(':id')
-  @Roles('ADMIN', 'STAFF')
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'Cập nhật thông tin sinh viên' })
   @ApiResponse({ status: 200, description: 'Sinh viên đã được cập nhật' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy sinh viên' })
