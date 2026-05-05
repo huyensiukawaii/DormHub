@@ -305,7 +305,7 @@ export default function RoomsPage() {
             onChange={(e) => setFilterBuilding(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
           >
-            {!isStaff && <option value="">Tất cả tòa</option>}
+            <option value="">Tất cả tòa</option>
             {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
 

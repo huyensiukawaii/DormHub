@@ -11,7 +11,7 @@ export class BuildingsService {
 
     const where: any = {};
 
-    if (allowedBuildingIds) {
+    if (allowedBuildingIds !== undefined) {
       where.id = { in: allowedBuildingIds };
     }
 

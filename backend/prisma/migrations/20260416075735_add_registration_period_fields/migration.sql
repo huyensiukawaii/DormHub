@@ -19,6 +19,11 @@
 ALTER TYPE "PeriodStatus" ADD VALUE 'DRAFT';
 ALTER TYPE "PeriodStatus" ADD VALUE 'CANCELLED';
 
+-- PostgreSQL requires enum values to be committed before they can be referenced.
+-- Committing here so the next statements can use 'DRAFT' as a default value.
+COMMIT;
+BEGIN;
+
 -- DropIndex
 DROP INDEX "registration_periods_semester_idx";
 

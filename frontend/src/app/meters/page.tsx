@@ -172,7 +172,7 @@ export default function MetersPage() {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-        // Cột 1 = Mã phòng, cột 5 = Chỉ số hiện tại (theo template)
+        // row[1] = Mã phòng, row[5] = Chỉ số hiện tại (0-indexed, theo template 6 cột)
         const roomMap = new Map(rooms.map((r) => [r.roomCode, r.roomId]));
         const newEditValues: Record<number, string> = {};
         const notFound: string[] = [];

@@ -24,7 +24,7 @@ export class ContractsService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
 
   async onModuleInit() {
-    // Retry once with a short delay — Neon pooler may close the connection at cold start
+    // Retry up to 3 times with exponential delay — Neon pooler may close the connection at cold start
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await this.autoExpireContracts();
