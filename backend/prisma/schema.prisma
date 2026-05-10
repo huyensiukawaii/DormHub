@@ -124,37 +124,42 @@ enum DocumentStatus {
   REJECTED
 }
 
+enum InvoiceType {
+  ROOM_FEE
+  UTILITY
+}
+
 // =============================================
 // MODELS
 // =============================================
 
 // 1. User - Tài khoản người dùng
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole
-  fullName     String   @map("full_name")
-  phone        String?
-  avatarUrl    String?  @map("avatar_url")
-  isActive            Boolean  @default(true) @map("is_active")
-  mustChangePassword  Boolean  @default(false) @map("must_change_password")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                 Int      @id @default(autoincrement())
+  email              String   @unique
+  passwordHash       String   @map("password_hash")
+  role               UserRole
+  fullName           String   @map("full_name")
+  phone              String?
+  avatarUrl          String?  @map("avatar_url")
+  isActive           Boolean  @default(true) @map("is_active")
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   student                    Student?
-  reviewedApplications       RegistrationApplication[]  @relation("ReviewedBy")
-  createdContracts           Contract[]                 @relation("CreatedBy")
-  createdRegistrationPeriods RegistrationPeriod[]       @relation("CreatedRegistrationPeriods")
-  passwordResetTokens   PasswordResetToken[]
-  recordedMeterReadings MeterReading[]
-  approvedInvoices      Invoice[]                 @relation("ApprovedBy")
-  handledTickets        MaintenanceTicket[]       @relation("HandledBy")
-  notifications         Notification[]
-  updatedSettings       Setting[]
-  reviewedDocuments     PriorityDocument[]        @relation("ReviewedDocuments")
-  assignedBuildings     UserBuilding[]
-  assignedBuildingsBy   UserBuilding[]            @relation("AssignedByUser")
+  reviewedApplications       RegistrationApplication[] @relation("ReviewedBy")
+  createdContracts           Contract[]                @relation("CreatedBy")
+  createdRegistrationPeriods RegistrationPeriod[]      @relation("CreatedRegistrationPeriods")
+  passwordResetTokens        PasswordResetToken[]
+  recordedMeterReadings      MeterReading[]
+  approvedInvoices           Invoice[]                 @relation("ApprovedBy")
+  handledTickets             MaintenanceTicket[]       @relation("HandledBy")
+  notifications              Notification[]
+  updatedSettings            Setting[]
+  reviewedDocuments          PriorityDocument[]        @relation("ReviewedDocuments")
+  assignedBuildings          UserBuilding[]
+  assignedBuildingsBy        UserBuilding[]            @relation("AssignedByUser")
 
   @@map("users")
 }
@@ -209,18 +214,18 @@ model Room {
 
 // 5. Student - Sinh viên
 model Student {
-  id               Int       @id @default(autoincrement())
-  userId           Int       @unique @map("user_id")
-  studentCode      String    @unique @map("student_code") // MSSV
-  fullName         String    @map("full_name")
+  id               Int           @id @default(autoincrement())
+  userId           Int           @unique @map("user_id")
+  studentCode      String        @unique @map("student_code") // MSSV
+  fullName         String        @map("full_name")
   gender           Gender
-  dateOfBirth      DateTime? @map("date_of_birth") @db.Date
-  idCardNumber     String?   @map("id_card_number") // CCCD
+  dateOfBirth      DateTime?     @map("date_of_birth") @db.Date
+  idCardNumber     String?       @map("id_card_number") // CCCD
   phone            String?
   email            String?
-  majorCode        String?   @map("major_code") // Mã ngành học
+  majorCode        String?       @map("major_code") // Mã ngành học
   faculty          String? // Khoa
-  className        String?   @map("class_name") // Lớp
+  className        String?       @map("class_name") // Lớp
   hometownProvince String?       @map("hometown_province") // Tỉnh quê quán
   hometownDistance Int?          @map("hometown_distance") // Khoảng cách (km)
   status           StudentStatus @default(ACTIVE)
@@ -244,16 +249,16 @@ model Student {
 
 // 6. RegistrationPeriod - Đợt đăng ký
 model RegistrationPeriod {
-  id           Int          @id @default(autoincrement())
-  code         String       @unique // "2025-2026-HK1"
+  id           Int       @id @default(autoincrement())
+  code         String    @unique // "2025-2026-HK1"
   name         String // "Đăng ký KTX HK1 năm học 2025-2026"
-  academicYear String       @map("academic_year") // "2025-2026"
+  academicYear String    @map("academic_year") // "2025-2026"
   semester     Int // 1 hoặc 2
   description  String?
-  startDate    DateTime     @map("start_date")
-  endDate      DateTime     @map("end_date")
-  moveInDate   DateTime?    @map("move_in_date")
-  moveOutDate  DateTime?    @map("move_out_date")
+  startDate    DateTime  @map("start_date")
+  endDate      DateTime  @map("end_date")
+  moveInDate   DateTime? @map("move_in_date")
+  moveOutDate  DateTime? @map("move_out_date")
 
   maxApplicationsPerStudent Int     @default(1) @map("max_applications_per_student")
   allowRoomPreference       Boolean @default(false) @map("allow_room_preference")
@@ -374,6 +379,8 @@ model Contract {
   application RegistrationApplication? @relation(fields: [applicationId], references: [id])
   createdBy   User?                    @relation("CreatedBy", fields: [createdById], references: [id])
 
+  roomFeeInvoice Invoice? @relation("RoomFeeInvoice")
+
   @@index([studentId])
   @@index([roomId])
   @@index([status])
@@ -426,6 +433,10 @@ model Invoice {
   roomId       Int      @map("room_id")
   billingMonth DateTime @map("billing_month") @db.Date
 
+  type       InvoiceType @default(UTILITY)
+  contractId Int?        @unique @map("contract_id")
+  contract   Contract?   @relation("RoomFeeInvoice", fields: [contractId], references: [id])
+
   // Chi phí
   roomFee        Decimal @map("room_fee") @db.Decimal(12, 0) // Tổng tiền phòng
   electricityFee Decimal @map("electricity_fee") @db.Decimal(12, 0) // Tiền điện
@@ -444,6 +455,8 @@ model Invoice {
   paidAt       DateTime?     @map("paid_at")
   approvedById Int?          @map("approved_by")
   approvedAt   DateTime?     @map("approved_at")
+  rejectionNote String?      @map("rejection_note")
+  rejectedAt   DateTime?     @map("rejected_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -451,7 +464,6 @@ model Invoice {
   room       Room  @relation(fields: [roomId], references: [id])
   approvedBy User? @relation("ApprovedBy", fields: [approvedById], references: [id])
 
-  @@unique([roomId, billingMonth])
   @@index([roomId])
   @@index([billingMonth])
   @@index([status])
@@ -533,10 +545,10 @@ model Setting {
 
 // 16. UserBuilding - Phân công nhân viên quản lý tòa
 model UserBuilding {
-  userId     Int      @map("user_id")
-  buildingId Int      @map("building_id")
-  assignedAt DateTime @default(now()) @map("assigned_at")
-  assignedById Int?   @map("assigned_by_id")
+  userId       Int      @map("user_id")
+  buildingId   Int      @map("building_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+  assignedById Int?     @map("assigned_by_id")
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)

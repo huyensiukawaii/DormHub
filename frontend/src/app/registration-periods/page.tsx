@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
@@ -60,7 +60,7 @@ const STATUS_CONFIG: Record<PeriodStatus, { label: string; color: string; bg: st
   CANCELLED: { label: 'Đã hủy', color: 'text-red-600', bg: 'bg-red-100', icon: XCircle },
 };
 
-export default function RegistrationPeriodsPage() {
+function RegistrationPeriodsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1011,5 +1011,13 @@ export default function RegistrationPeriodsPage() {
         </div>
       )}
     </AdminLayout>
+  );
+}
+
+export default function RegistrationPeriodsPageWrapper() {
+  return (
+    <Suspense>
+      <RegistrationPeriodsPage />
+    </Suspense>
   );
 }

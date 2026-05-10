@@ -51,7 +51,7 @@ interface ContractDetail {
     type: string;
     period: { name: string };
   } | null;
-  roommates: Array<{ id: number; studentCode: string; fullName: string; gender: string }>;
+  roommates: Array<{ id: number; studentCode: string; fullName: string; gender: string; isRoomLeader: boolean }>;
 }
 
 export default function StudentContractDetailPage() {
@@ -201,20 +201,48 @@ export default function StudentContractDetailPage() {
           {/* Người ở cùng */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">
-              Người ở cùng ({contract.roommates.length})
+              Người ở cùng ({contract.roommates.length + 1})
             </h3>
-            {contract.roommates.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">Chưa có ai ở cùng phòng</p>
-            ) : (
-              <div className="space-y-3">
-                {contract.roommates.map((mate, idx) => (
+            <div className="space-y-3">
+              {/* Bản thân */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ring-2 ring-amber-300 ${contract.student?.gender === 'MALE' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
+                    {contract.student?.fullName?.split(' ').pop()?.charAt(0) || '?'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-slate-800">{contract.student?.fullName} <span className="text-slate-400 text-xs">(Bạn)</span></p>
+                      {contract.isRoomLeader && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full">
+                          <Crown className="w-2.5 h-2.5" /> TP
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">{contract.student?.studentCode}</p>
+                  </div>
+                </div>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">Giường 01</span>
+              </div>
+
+              {contract.roommates.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-2">Chưa có ai ở cùng phòng</p>
+              )}
+              {contract.roommates.map((mate, idx) => (
                   <div key={mate.id} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${mate.gender === 'MALE' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
                         {mate.fullName.split(' ').pop()?.charAt(0) || '?'}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{mate.fullName}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-slate-800">{mate.fullName}</p>
+                          {mate.isRoomLeader && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full">
+                              <Crown className="w-2.5 h-2.5" /> TP
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500">{mate.studentCode}</p>
                       </div>
                     </div>
@@ -223,8 +251,7 @@ export default function StudentContractDetailPage() {
                     </span>
                   </div>
                 ))}
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
