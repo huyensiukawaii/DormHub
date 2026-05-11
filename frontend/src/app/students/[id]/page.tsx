@@ -469,7 +469,7 @@ export default function StudentDetailPage() {
                 <span className="text-xs font-medium text-slate-600 group-hover:text-emerald-700">Hợp đồng</span>
               </Link>
               <Link
-                href={currentRoomId ? `/invoices?roomId=${currentRoomId}` : `/invoices?studentId=${student.id}`}
+                href={`/invoices?studentId=${student.id}`}
                 className="flex flex-col items-center gap-2 p-4 bg-slate-50 hover:bg-emerald-50 rounded-lg transition-colors group"
               >
                 <Receipt className="w-6 h-6 text-slate-500 group-hover:text-emerald-600" />

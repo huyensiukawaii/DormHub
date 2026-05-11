@@ -240,4 +240,4 @@ function MyApplicationsPage() {
   );
 }
 
-export default function MyApplicationsPageWrapper() { return <Suspense><MyApplicationsPage /></Suspense>; }
+export default function MyApplicationsPageWrapper() { return <Suspense fallback={null}><MyApplicationsPage /></Suspense>; }

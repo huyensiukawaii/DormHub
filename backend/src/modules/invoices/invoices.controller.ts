@@ -14,7 +14,7 @@ import {
   CreateUtilityInvoiceDto, BatchCreateUtilityDto,
   ConfirmPaymentDto, UploadProofDto, QueryInvoiceDto, RejectProofDto,
 } from './dto';
-import { getAllowedBuildingIds, assertAllowed } from '@/common/utils/building-access';
+import { getAllowedBuildingIds } from '@/common/utils/building-access';
 
 @ApiTags('Invoices')
 @ApiBearerAuth()
@@ -34,6 +34,8 @@ export class InvoicesController {
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Thống kê hóa đơn theo tháng' })
   async getStats(@Query('billingMonth') billingMonth: string, @Request() req: any) {
+    if (!billingMonth?.trim()) throw new BadRequestException('billingMonth là bắt buộc');
+    if (!/^\d{4}-\d{2}/.test(billingMonth)) throw new BadRequestException('billingMonth phải bắt đầu bằng YYYY-MM');
     return this.service.getStats(billingMonth, getAllowedBuildingIds(req.user));
   }
 
@@ -55,11 +57,7 @@ export class InvoicesController {
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Tạo hóa đơn tiện ích cho 1 phòng' })
   async createUtility(@Body() dto: CreateUtilityInvoiceDto, @Request() req: any) {
-    const allowed = getAllowedBuildingIds(req.user);
-    if (allowed !== undefined) {
-      await this.service['assertBuildingAccess'](dto.roomId, allowed);
-    }
-    return this.service.createUtility(dto);
+    return this.service.createUtility(dto, getAllowedBuildingIds(req.user));
   }
 
   @Post('batch')
@@ -112,7 +110,7 @@ export class InvoicesController {
     @Request() req: any,
   ) {
     if (!file) throw new BadRequestException('Vui lòng chọn ảnh');
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowed.includes(file.mimetype)) throw new BadRequestException('Chỉ hỗ trợ ảnh JPG, PNG, WEBP');
     const folder = `dormhub/proofs/${req.user.studentId}`;
     const { url } = await this.cloudinary.uploadBuffer(file.buffer, file.originalname, folder);

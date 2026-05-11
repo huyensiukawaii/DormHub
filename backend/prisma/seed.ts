@@ -902,7 +902,7 @@ async function main() {
   console.log('  • PENDING (có proof): INV-UTL-2026-04-A103, INV-UTL-2026-04-B102');
   console.log('  • PENDING (không proof): INV-UTL-2026-04-A202, INV-UTL-2026-05-*');
   console.log('  • OVERDUE: INV-UTL-2026-04-B202');
-  console.log('  • CANCELLED: INV-UTL-2026-04-B201-DUP');
+  console.log('  • CANCELLED: INV-UTL-2026-03-B201-CANCEL');
   console.log('  • ROOM_FEE: RF-202602-000x (tự động tạo theo HĐ)');
   console.log('═══════════════════════════════════════════════════════════');
 }

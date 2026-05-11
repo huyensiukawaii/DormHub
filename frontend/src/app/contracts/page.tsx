@@ -587,4 +587,4 @@ function ContractsPage() {
     </AdminLayout>
   );
 }
-export default function ContractsPageWrapper() { return <Suspense><ContractsPage /></Suspense>; }
+export default function ContractsPageWrapper() { return <Suspense fallback={null}><ContractsPage /></Suspense>; }

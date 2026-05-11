@@ -1016,7 +1016,7 @@ function RegistrationPeriodsPage() {
 
 export default function RegistrationPeriodsPageWrapper() {
   return (
-    <Suspense>
+    <Suspense fallback={null}>
       <RegistrationPeriodsPage />
     </Suspense>
   );

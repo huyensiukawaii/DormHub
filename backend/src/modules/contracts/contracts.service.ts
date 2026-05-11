@@ -143,19 +143,20 @@ export class ContractsService implements OnModuleInit {
     });
 
     if (initialStatus === 'ACTIVE') {
-      const existingLeader = await this.prisma.contract.findFirst({
-        where: { roomId: contract.roomId, status: 'ACTIVE', isRoomLeader: true },
-      });
-      if (!existingLeader) {
-        await this.prisma.contract.update({
-          where: { id: contract.id },
-          data: { isRoomLeader: true },
+      if (dto.isRoomLeader) {
+        await this.prisma.contract.updateMany({
+          where: { roomId: contract.roomId, status: 'ACTIVE', isRoomLeader: true, id: { not: contract.id } },
+          data: { isRoomLeader: false },
         });
+      } else {
+        const hasLeader = await this.prisma.contract.findFirst({
+          where: { roomId: contract.roomId, status: 'ACTIVE', isRoomLeader: true },
+        });
+        if (!hasLeader) {
+          await this.prisma.contract.update({ where: { id: contract.id }, data: { isRoomLeader: true } });
+        }
       }
-      await this.invoices.createRoomFeeInvoice({
-        ...contract,
-        isRoomLeader: !existingLeader,
-      });
+      await this.invoices.createRoomFeeInvoice({ ...contract });
     }
 
     return contract;
@@ -164,7 +165,7 @@ export class ContractsService implements OnModuleInit {
   // ========================================
   // CREATE FROM APPLICATION (Khi duyệt đơn)
   // ========================================
-  async createFromApplication(dto: CreateContractFromApplicationDto, createdById: number | null) {
+  async createFromApplication(dto: CreateContractFromApplicationDto, createdById: number | null, allowedBuildingIds?: number[]) {
     const application = await this.prisma.registrationApplication.findUnique({
       where: { id: dto.applicationId },
       include: {
@@ -188,6 +189,7 @@ export class ContractsService implements OnModuleInit {
       include: { _count: { select: { contracts: { where: { status: 'ACTIVE' } } } } },
     });
     if (!room) throw new NotFoundException('Không tìm thấy phòng');
+    assertAllowed(allowedBuildingIds, room.buildingId);
     if (room.status !== 'ACTIVE') throw new BadRequestException('Phòng không khả dụng');
     if (room.gender !== application.student.gender) {
       throw new BadRequestException(
@@ -253,19 +255,20 @@ export class ContractsService implements OnModuleInit {
     });
 
     if (initialStatus === 'ACTIVE') {
-      const existingLeader = await this.prisma.contract.findFirst({
-        where: { roomId: contract.roomId, status: 'ACTIVE', isRoomLeader: true },
-      });
-      if (!existingLeader) {
-        await this.prisma.contract.update({
-          where: { id: contract.id },
-          data: { isRoomLeader: true },
+      if (dto.isRoomLeader) {
+        await this.prisma.contract.updateMany({
+          where: { roomId: contract.roomId, status: 'ACTIVE', isRoomLeader: true, id: { not: contract.id } },
+          data: { isRoomLeader: false },
         });
+      } else {
+        const hasLeader = await this.prisma.contract.findFirst({
+          where: { roomId: contract.roomId, status: 'ACTIVE', isRoomLeader: true },
+        });
+        if (!hasLeader) {
+          await this.prisma.contract.update({ where: { id: contract.id }, data: { isRoomLeader: true } });
+        }
       }
-      await this.invoices.createRoomFeeInvoice({
-        ...contract,
-        isRoomLeader: !existingLeader,
-      });
+      await this.invoices.createRoomFeeInvoice({ ...contract });
     }
 
     return contract;

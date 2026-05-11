@@ -105,8 +105,8 @@ export default function StudentInvoiceDetailPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setProofPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
     setProofFile(file);
-    setProofPreview(URL.createObjectURL(file));
     setUploadError('');
   };
 
@@ -126,7 +126,7 @@ export default function StudentInvoiceDetailPage() {
       setInvoice(r.data);
       setShowUpload(false);
       setProofFile(null);
-      setProofPreview('');
+      setProofPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ''; });
     } catch (err: any) {
       setUploadError(err.response?.data?.message || 'Không thể gửi minh chứng');
     } finally {
@@ -145,7 +145,7 @@ export default function StudentInvoiceDetailPage() {
     if (uploading) return;
     setShowUpload(false);
     setProofFile(null);
-    setProofPreview('');
+    setProofPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ''; });
     setUploadError('');
   };
 
@@ -482,7 +482,7 @@ export default function StudentInvoiceDetailPage() {
                   />
                 </label>
                 {proofFile && (
-                  <button type="button" onClick={() => { setProofFile(null); setProofPreview(''); }} className="mt-1.5 text-xs text-slate-400 hover:text-red-500">
+                  <button type="button" onClick={() => { setProofFile(null); setProofPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return ''; }); }} className="mt-1.5 text-xs text-slate-400 hover:text-red-500">
                     Chọn lại ảnh khác
                   </button>
                 )}

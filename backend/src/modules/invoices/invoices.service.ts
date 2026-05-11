@@ -43,8 +43,8 @@ export class InvoicesService {
     // dueDate = ngày check-in (phải đóng trước khi nhận phòng)
     const dueDate = new Date(start);
 
-    const roomCode = contract.room?.code ?? (await this.prisma.room.findUniqueOrThrow({ where: { id: contract.roomId }, select: { code: true } })).code;
-    const code = this.generateCode('RF', billingMonth, roomCode);
+    // Dùng contract.code để đảm bảo unique — roomCode+month có thể trùng khi RENEWAL cùng tháng
+    const code = `RF-${contract.code}`;
 
     return this.prisma.invoice.create({
       data: {
@@ -70,8 +70,12 @@ export class InvoicesService {
   // ========================================
   // CREATE UTILITY INVOICE — 1 phòng
   // ========================================
-  async createUtility(dto: CreateUtilityInvoiceDto) {
+  async createUtility(dto: CreateUtilityInvoiceDto, allowedBuildingIds?: number[]) {
     const billingMonth = this.normalizeMonth(dto.billingMonth);
+
+    if (allowedBuildingIds !== undefined) {
+      await this.assertBuildingAccess(dto.roomId, allowedBuildingIds);
+    }
 
     // Check duplicate
     const existing = await this.prisma.invoice.findFirst({
@@ -166,8 +170,6 @@ export class InvoicesService {
     const m3 = Number(waterReading.consumption);
 
     const { totalCost: electricityFee } = await this.settings.calculateElectricityCost(kWh);
-    const { totalCost: waterFee } = await this.settings.calculateWaterCost(m3, occupantsCount);
-    // waterFee ở UTILITY chỉ là phần vượt định mức
     const { breakdown } = await this.settings.calculateWaterCost(m3, occupantsCount);
     const utilityWaterFee = breakdown.overQuotaFee;
 
@@ -292,7 +294,7 @@ export class InvoicesService {
   // FIND ALL (Admin/Staff)
   // ========================================
   async findAll(query: QueryInvoiceDto, allowedBuildingIds?: number[]) {
-    const { page = 1, limit = 20, roomId, buildingId, status, type, billingMonth, search, sortOrder = 'desc' } = query;
+    const { page = 1, limit = 20, roomId, buildingId, studentId, status, type, billingMonth, search, sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -300,12 +302,33 @@ export class InvoicesService {
     if (status) where.status = status;
     if (type) where.type = type;
     if (billingMonth) where.billingMonth = this.normalizeMonth(billingMonth);
-    if (search) where.OR = [
-      { code: { contains: search, mode: 'insensitive' } },
-      { room: { code: { contains: search, mode: 'insensitive' } } },
-    ];
 
-    // Building scope
+    if (studentId) {
+      const contracts = await this.prisma.contract.findMany({
+        where: { studentId },
+        select: { id: true, roomId: true },
+      });
+      const studentRoomIds = [...new Set(contracts.map((c) => c.roomId))];
+      const studentContractIds = contracts.map((c) => c.id);
+      const studentScope = {
+        OR: [
+          { roomId: { in: studentRoomIds }, type: 'UTILITY' },
+          { contractId: { in: studentContractIds }, type: 'ROOM_FEE' },
+        ],
+      };
+      // Kết hợp AND để search không bị ghi đè
+      where.AND = search
+        ? [studentScope, { OR: [{ code: { contains: search, mode: 'insensitive' } }, { room: { code: { contains: search, mode: 'insensitive' } } }] }]
+        : [studentScope];
+      delete where.roomId;
+    } else if (search) {
+      where.OR = [
+        { code: { contains: search, mode: 'insensitive' } },
+        { room: { code: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    // Building scope luôn áp dụng — kể cả khi đã filter theo studentId
     if (allowedBuildingIds !== undefined) {
       const scope = buildingId
         ? allowedBuildingIds.filter((id) => id === Number(buildingId))
@@ -354,13 +377,6 @@ export class InvoicesService {
   // STUDENT: Lấy hóa đơn phòng mình
   // ========================================
   async findForStudent(studentId: number, query: QueryInvoiceDto) {
-    // Lấy contract đang active của SV → lấy roomId
-    const contract = await this.prisma.contract.findFirst({
-      where: { studentId, status: 'ACTIVE' },
-      select: { roomId: true },
-    });
-
-    // Nếu không có HĐ active, lấy lịch sử tất cả phòng đã ở
     const allContracts = await this.prisma.contract.findMany({
       where: { studentId },
       select: { id: true, roomId: true },
@@ -378,9 +394,8 @@ export class InvoicesService {
 
     if (query.status) where.status = query.status;
     if (query.type) {
-      // Override OR với type filter
       delete where.OR;
-      if (query.type === 'UTILITY') where.roomId = contract?.roomId;
+      if (query.type === 'UTILITY') where.roomId = { in: roomIds };
       else where.contractId = { in: contractIds };
       where.type = query.type;
     }
@@ -453,8 +468,9 @@ export class InvoicesService {
   // HELPERS
   // ========================================
   private normalizeMonth(dateStr: string): Date {
-    const [year, month] = dateStr.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, 1));
+    const parsed = new Date(dateStr);
+    if (Number.isNaN(parsed.getTime())) throw new BadRequestException('Tháng không hợp lệ');
+    return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1));
   }
 
   private generateCode(prefix: string, month: Date, roomCode: string): string {

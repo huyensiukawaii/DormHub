@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   Receipt, Search, Plus, ChevronRight, Loader2, AlertCircle,
@@ -61,8 +61,12 @@ const thisMonth = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
-export default function InvoicesPage() {
+function InvoicesPage() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const studentId = sp.get('studentId') ?? '';
+  const roomId    = sp.get('roomId') ?? '';
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +74,12 @@ export default function InvoicesPage() {
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType]   = useState('');
-  const [filterMonth, setFilterMonth] = useState(thisMonth());
+  const [filterMonth, setFilterMonth] = useState(studentId ? '' : thisMonth());
+
+  // Reset filterMonth khi xóa filter student/room
+  useEffect(() => {
+    if (!studentId && !roomId) setFilterMonth(thisMonth());
+  }, [studentId, roomId]);
   const [page, setPage]               = useState(1);
   const [totalPages, setTotalPages]   = useState(1);
   const [total, setTotal]             = useState(0);
@@ -100,6 +109,8 @@ export default function InvoicesPage() {
       if (filterStatus) p.append('status', filterStatus);
       if (filterType)   p.append('type', filterType);
       if (filterMonth)  p.append('billingMonth', filterMonth);
+      if (studentId)    p.append('studentId', studentId);
+      else if (roomId)  p.append('roomId', roomId);
       const res = await api.get(`/invoices?${p}`);
       setInvoices(res.data.data);
       setTotal(res.data.total);
@@ -109,7 +120,7 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterStatus, filterType, filterMonth]);
+  }, [page, search, filterStatus, filterType, filterMonth, studentId, roomId]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
@@ -160,7 +171,21 @@ export default function InvoicesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Hóa đơn</h1>
-          <p className="text-sm text-slate-500 mt-1">Quản lý hóa đơn tiện ích ký túc xá</p>
+          {studentId ? (
+            <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+              Đang lọc theo sinh viên
+              <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">ID {studentId}</span>
+              <button onClick={() => router.push('/invoices')} className="text-slate-400 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+            </p>
+          ) : roomId ? (
+            <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+              Đang lọc theo phòng
+              <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">ID {roomId}</span>
+              <button onClick={() => router.push('/invoices')} className="text-slate-400 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+            </p>
+          ) : (
+            <p className="text-sm text-slate-500 mt-1">Quản lý hóa đơn tiện ích ký túc xá</p>
+          )}
         </div>
         <button
           onClick={() => { setBatchResult(null); setBatchMonth(thisMonth()); setBatchBuilding(''); setShowBatch(true); }}
@@ -341,7 +366,10 @@ export default function InvoicesPage() {
               {invoices.length === 0 && (
                 <div className="text-center py-12">
                   <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">Không có hóa đơn nào</p>
+                  <p className="text-slate-500 font-medium">Không có hóa đơn nào</p>
+                  {studentId && (
+                    <p className="text-xs text-slate-400 mt-1">Sinh viên này có thể ở tòa nhà bạn không được phân quyền quản lý</p>
+                  )}
                 </div>
               )}
             </div>
@@ -438,3 +466,5 @@ export default function InvoicesPage() {
     </AdminLayout>
   );
 }
+
+export default function InvoicesPageWrapper() { return <Suspense fallback={null}><InvoicesPage /></Suspense>; }

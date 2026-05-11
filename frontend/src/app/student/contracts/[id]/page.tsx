@@ -247,7 +247,7 @@ export default function StudentContractDetailPage() {
                       </div>
                     </div>
                     <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
-                      Giường {(idx + 1).toString().padStart(2, '0')}
+                      Giường {(idx + 2).toString().padStart(2, '0')}
                     </span>
                   </div>
                 ))}

@@ -591,4 +591,4 @@ function RoomsPage() {
     </AdminLayout>
   );
 }
-export default function RoomsPageWrapper() { return <Suspense><RoomsPage /></Suspense>; }
+export default function RoomsPageWrapper() { return <Suspense fallback={null}><RoomsPage /></Suspense>; }

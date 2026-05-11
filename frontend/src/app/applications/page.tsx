@@ -391,4 +391,4 @@ function ApplicationsPage() {
   );
 }
 
-export default function ApplicationsPageWrapper() { return <Suspense><ApplicationsPage /></Suspense>; }
+export default function ApplicationsPageWrapper() { return <Suspense fallback={null}><ApplicationsPage /></Suspense>; }

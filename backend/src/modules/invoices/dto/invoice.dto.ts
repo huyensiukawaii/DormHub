@@ -1,5 +1,5 @@
 import {
-  IsInt, IsOptional, IsString, IsEnum, IsDateString, Min, Max,
+  IsInt, IsOptional, IsString, IsEnum, IsDateString, IsIn, Min, Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
@@ -93,6 +93,12 @@ export class QueryInvoiceDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  studentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   buildingId?: number;
 
   @ApiPropertyOptional({ enum: InvoiceStatus })
@@ -117,6 +123,6 @@ export class QueryInvoiceDto {
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }
