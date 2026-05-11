@@ -80,7 +80,7 @@ export class AdminContractsController {
     @Body() dto: CreateContractFromApplicationDto,
     @Request() req: any,
   ) {
-    return this.service.createFromApplication(dto, req.user.id);
+    return this.service.createFromApplication(dto, req.user.id, getAllowedBuildingIds(req.user));
   }
 
   @Patch(':id/check-in')

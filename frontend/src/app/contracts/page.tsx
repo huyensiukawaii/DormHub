@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
@@ -56,7 +56,7 @@ const STATUS_CONFIG: Record<ContractStatus, { label: string; color: string; bg: 
   TERMINATED: { label: 'Đã chấm dứt', color: 'text-red-700', bg: 'bg-red-100', icon: XCircle },
 };
 
-export default function ContractsPage() {
+function ContractsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studentIdParam = searchParams.get('studentId');
@@ -587,3 +587,4 @@ export default function ContractsPage() {
     </AdminLayout>
   );
 }
+export default function ContractsPageWrapper() { return <Suspense fallback={null}><ContractsPage /></Suspense>; }

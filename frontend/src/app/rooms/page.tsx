@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
@@ -49,7 +49,7 @@ type RoomFormData = {
   status: Room['status'];
 };
 
-export default function RoomsPage() {
+function RoomsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -591,3 +591,4 @@ export default function RoomsPage() {
     </AdminLayout>
   );
 }
+export default function RoomsPageWrapper() { return <Suspense fallback={null}><RoomsPage /></Suspense>; }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
@@ -55,7 +55,7 @@ const STATUS_CFG: Record<ApplicationStatus, { label: string; color: string; bg: 
   CANCELLED: { label: 'Đã hủy',    color: 'text-slate-600',   bg: 'bg-slate-100',  border: 'border-slate-200',   icon: XCircle },
 };
 
-export default function ApplicationsPage() {
+function ApplicationsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -390,3 +390,5 @@ export default function ApplicationsPage() {
     </AdminLayout>
   );
 }
+
+export default function ApplicationsPageWrapper() { return <Suspense fallback={null}><ApplicationsPage /></Suspense>; }

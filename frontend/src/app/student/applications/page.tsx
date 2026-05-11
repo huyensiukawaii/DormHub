@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import StudentLayout from '@/components/layouts/StudentLayout';
@@ -60,7 +60,7 @@ const STATUS_CONFIG: Record<ApplicationStatus, { label: string; color: string; b
   CANCELLED: { label: 'Đã hủy',    color: 'text-slate-500',   bg: 'bg-slate-50 border-slate-200',   bar: 'bg-slate-300',   icon: XCircle },
 };
 
-export default function MyApplicationsPage() {
+function MyApplicationsPage() {
   const searchParams = useSearchParams();
   const justSubmitted = searchParams.get('success') === 'true';
 
@@ -239,3 +239,5 @@ export default function MyApplicationsPage() {
     </StudentLayout>
   );
 }
+
+export default function MyApplicationsPageWrapper() { return <Suspense fallback={null}><MyApplicationsPage /></Suspense>; }

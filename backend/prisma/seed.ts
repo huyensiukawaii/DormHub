@@ -10,6 +10,8 @@ import {
   ApplicationType,
   ContractStatus,
   PeriodStatus,
+  InvoiceStatus,
+  InvoiceType,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
@@ -92,6 +94,13 @@ async function main() {
   });
 
   console.log(`✅ Buildings: ${bldA.name}, ${bldB.name}`);
+
+  // Gán staff quản lý tòa A (không phải toàn bộ — staff chỉ thấy hóa đơn tòa mình quản)
+  await prisma.userBuilding.upsert({
+    where: { userId_buildingId: { userId: staff.id, buildingId: bldA.id } },
+    update: {},
+    create: { userId: staff.id, buildingId: bldA.id, assignedById: admin.id },
+  });
 
   // ─── 3. Rooms ──────────────────────────────────────────────────────────────
 
@@ -473,101 +482,313 @@ async function main() {
   }
   console.log(`✅ Active contracts for current semester created`);
 
-  // Hóa đơn 6 tháng gần nhất (Nov 2025 → Apr 2026) - trạng thái PAID
-  const invoiceMonths = [
-    { month: new Date('2025-11-01'), label: '2025-11' },
-    { month: new Date('2025-12-01'), label: '2025-12' },
-    { month: new Date('2026-01-01'), label: '2026-01' },
-    { month: new Date('2026-02-01'), label: '2026-02' },
-    { month: new Date('2026-03-01'), label: '2026-03' },
-    { month: new Date('2026-04-01'), label: '2026-04' },
+  // ─── 11a. Cập nhật isRoomLeader cho mỗi phòng ──────────────────────────────
+  // Đặt trưởng phòng là hợp đồng đầu tiên trong mỗi phòng
+
+  const leaderContracts = [
+    'HD-2026-001', // sv7 – A101
+    'HD-2026-004', // sv10 – A201
+    'HD-2026-006', // sv12 – B201
+    'HD-2026-008', // sv14 – B102
+    'HD-2026-009', // sv15 – B202
+    'HD-2024-004', // sv4 – B101
+  ];
+  for (const code of leaderContracts) {
+    await prisma.contract.updateMany({
+      where: { code },
+      data: { isRoomLeader: true },
+    });
+  }
+  console.log(`✅ Room leaders assigned`);
+
+  // ─── 11b. Thêm hợp đồng cho sv1, sv2, sv3 (HK2 2025-2026) ─────────────────
+
+  const semesterStart = new Date('2026-02-10');
+  const semesterEnd   = new Date('2026-06-30');
+
+  const sv1Contract = await prisma.contract.upsert({
+    where: { code: 'HD-2026-011' },
+    update: {},
+    create: {
+      code: 'HD-2026-011', studentId: sv1.id, roomId: rA102.id,
+      startDate: semesterStart, endDate: semesterEnd,
+      monthlyRent: 350000, status: ContractStatus.ACTIVE,
+      checkedInAt: semesterStart, isRoomLeader: true, createdById: admin.id,
+    },
+  });
+  const sv2Contract = await prisma.contract.upsert({
+    where: { code: 'HD-2026-012' },
+    update: {},
+    create: {
+      code: 'HD-2026-012', studentId: sv2.id, roomId: rA103.id,
+      startDate: semesterStart, endDate: semesterEnd,
+      monthlyRent: 550000, status: ContractStatus.ACTIVE,
+      checkedInAt: semesterStart, isRoomLeader: true, createdById: admin.id,
+    },
+  });
+  const sv3Contract = await prisma.contract.upsert({
+    where: { code: 'HD-2026-013' },
+    update: {},
+    create: {
+      code: 'HD-2026-013', studentId: sv3.id, roomId: rB102.id,
+      startDate: semesterStart, endDate: semesterEnd,
+      monthlyRent: 550000, status: ContractStatus.ACTIVE,
+      checkedInAt: semesterStart, isRoomLeader: false, createdById: admin.id,
+    },
+  });
+  console.log(`✅ Active contracts for sv1 (A102), sv2 (A103), sv3 (B102) created`);
+
+  // ─── 11c. Hàm upsert hóa đơn UTILITY ─────────────────────────────────────
+
+  async function upsertUtilityInvoice(data: {
+    code: string; roomCode: string; label: string; month: Date;
+    kWh: number; m3: number; occupants: number;
+    status: InvoiceStatus; paidAt?: Date; paymentProof?: string;
+    approvedById?: number;
+  }) {
+    const room = await prisma.room.findUnique({ where: { code: data.roomCode } });
+    if (!room) return;
+    // Check by room+month+UTILITY type (partial unique index) to avoid conflicts with old seed data
+    const existing = await prisma.invoice.findFirst({
+      where: { roomId: room.id, billingMonth: data.month, type: InvoiceType.UTILITY },
+    });
+    if (existing) {
+      const patch: any = {};
+      if (existing.code !== data.code) patch.code = data.code;
+      if (data.paymentProof !== undefined) patch.paymentProof = data.paymentProof;
+      if (Object.keys(patch).length > 0) {
+        await prisma.invoice.update({ where: { id: existing.id }, data: patch }).catch(() => {});
+      }
+      return;
+    }
+
+    const electricityFee = Math.round(data.kWh * 1786); // avg tier 2 price
+    const waterFee       = data.m3 > data.occupants * 4 ? Math.round((data.m3 - data.occupants * 4) * 7000) : 0;
+    const totalAmount    = electricityFee + waterFee;
+    const dueDate = new Date(data.month);
+    dueDate.setMonth(dueDate.getMonth() + 1);
+    dueDate.setDate(15);
+
+    await prisma.invoice.create({
+      data: {
+        code: data.code, roomId: room.id, type: InvoiceType.UTILITY,
+        billingMonth: data.month, roomFee: 0, electricityFee, waterFee, totalAmount,
+        electricityUsage: data.kWh, waterUsage: data.m3, occupantsCount: data.occupants,
+        dueDate, status: data.status,
+        paidAt: data.paidAt,
+        paymentProof: data.paymentProof,
+        approvedById: data.approvedById,
+        approvedAt: data.approvedById ? data.paidAt : undefined,
+      },
+    });
+  }
+
+  // ─── 11d. Hóa đơn UTILITY 5 tháng đã trả (Nov 25 → Mar 26) ───────────────
+
+  const paidMonths = [
+    { month: new Date('2025-11-01'), label: '2025-11', paid: new Date('2025-11-14') },
+    { month: new Date('2025-12-01'), label: '2025-12', paid: new Date('2025-12-12') },
+    { month: new Date('2026-01-01'), label: '2026-01', paid: new Date('2026-01-13') },
+    { month: new Date('2026-02-01'), label: '2026-02', paid: new Date('2026-02-14') },
+    { month: new Date('2026-03-01'), label: '2026-03', paid: new Date('2026-03-11') },
   ];
 
-  // Các phòng có người ở để tạo hóa đơn
-  const billedRooms = [
-    { roomCode: 'A101', rent: 350000, occupants: 3 },
-    { roomCode: 'A103', roomType: 'AIR_CONDITIONED', rent: 550000, occupants: 1 },
-    { roomCode: 'A201', rent: 350000, occupants: 2 },
-    { roomCode: 'A202', rent: 350000, occupants: 1 },
-    { roomCode: 'B101', rent: 350000, occupants: 3 },
-    { roomCode: 'B102', rent: 550000, occupants: 1 },
-    { roomCode: 'B201', rent: 350000, occupants: 2 },
-    { roomCode: 'B202', rent: 350000, occupants: 2 },
+  const roomBillingDefs = [
+    { roomCode: 'A101', kWhBase: 110, m3Base: 14, occupants: 3 },
+    { roomCode: 'A102', kWhBase: 80,  m3Base: 8,  occupants: 2 },
+    { roomCode: 'A103', kWhBase: 95,  m3Base: 6,  occupants: 2 },
+    { roomCode: 'A201', kWhBase: 90,  m3Base: 10, occupants: 2 },
+    { roomCode: 'A202', kWhBase: 75,  m3Base: 5,  occupants: 1 },
+    { roomCode: 'B101', kWhBase: 100, m3Base: 12, occupants: 3 },
+    { roomCode: 'B102', kWhBase: 85,  m3Base: 9,  occupants: 2 },
+    { roomCode: 'B201', kWhBase: 88,  m3Base: 10, occupants: 2 },
+    { roomCode: 'B202', kWhBase: 78,  m3Base: 8,  occupants: 2 },
   ];
 
-  for (const inv of invoiceMonths) {
-    for (const br of billedRooms) {
-      const room = await prisma.room.findUnique({ where: { code: br.roomCode } });
+  for (const m of paidMonths) {
+    for (const r of roomBillingDefs) {
+      const kWh = r.kWhBase + Math.floor(Math.random() * 20) - 10;
+      const m3  = r.m3Base  + Math.floor(Math.random() * 4)  - 2;
+      await upsertUtilityInvoice({
+        code: `INV-UTL-${m.label}-${r.roomCode}`,
+        roomCode: r.roomCode, label: m.label, month: m.month,
+        kWh, m3, occupants: r.occupants,
+        status: InvoiceStatus.PAID, paidAt: m.paid, approvedById: admin.id,
+      });
+    }
+  }
+  console.log(`✅ UTILITY invoices (PAID) for Nov25–Mar26 created`);
+
+  // ─── 11e. Hóa đơn tháng 4/2026 – đa dạng trạng thái ─────────────────────
+
+  const apr = new Date('2026-04-01');
+
+  // PAID (đã thanh toán trước deadline)
+  const paidAprRooms = ['A101', 'A102', 'A201', 'B101', 'B201'];
+  for (const roomCode of paidAprRooms) {
+    const def = roomBillingDefs.find((r) => r.roomCode === roomCode)!;
+    await upsertUtilityInvoice({
+      code: `INV-UTL-2026-04-${roomCode}`,
+      roomCode, label: '2026-04', month: apr,
+      kWh: def.kWhBase, m3: def.m3Base, occupants: def.occupants,
+      status: InvoiceStatus.PAID, paidAt: new Date('2026-04-13'), approvedById: admin.id,
+    });
+  }
+
+  // PENDING – có minh chứng chờ xác nhận
+  const pendingWithProof = ['A103', 'B102'];
+  for (const roomCode of pendingWithProof) {
+    const def = roomBillingDefs.find((r) => r.roomCode === roomCode)!;
+    await upsertUtilityInvoice({
+      code: `INV-UTL-2026-04-${roomCode}`,
+      roomCode, label: '2026-04', month: apr,
+      kWh: def.kWhBase, m3: def.m3Base, occupants: def.occupants,
+      status: InvoiceStatus.PENDING,
+      paymentProof: `https://res.cloudinary.com/dfouucs9m/image/upload/v1778422885/9216b6a3-dce5-473e-893b-9a5bb85fbbdd_ojwfr4.jpg`,
+    });
+  }
+
+  // PENDING – chưa có minh chứng
+  await upsertUtilityInvoice({
+    code: 'INV-UTL-2026-04-A202', roomCode: 'A202', label: '2026-04', month: apr,
+    kWh: 72, m3: 4, occupants: 1, status: InvoiceStatus.PENDING,
+  });
+
+  // OVERDUE – dùng dueDate cũ để simulate overdue
+  const room202 = await prisma.room.findUnique({ where: { code: 'B202' } });
+  if (room202) {
+    const existB202Apr = await prisma.invoice.findFirst({
+      where: { roomId: room202.id, billingMonth: apr, type: InvoiceType.UTILITY },
+    });
+    if (existB202Apr) {
+      await prisma.invoice.update({
+        where: { id: existB202Apr.id },
+        data: { code: 'INV-UTL-2026-04-B202', dueDate: new Date('2026-04-15'), status: InvoiceStatus.OVERDUE },
+      });
+    } else {
+      await prisma.invoice.create({
+        data: {
+          code: 'INV-UTL-2026-04-B202', roomId: room202.id, type: InvoiceType.UTILITY,
+          billingMonth: apr, roomFee: 0, electricityFee: 139280, waterFee: 0,
+          totalAmount: 139280, electricityUsage: 78, waterUsage: 7, occupantsCount: 2,
+          dueDate: new Date('2026-04-15'), status: InvoiceStatus.OVERDUE,
+        },
+      });
+    }
+  }
+
+  // CANCELLED – dùng tháng 3/2026 (đã qua) để không conflict với tháng 4
+  const roomB201 = await prisma.room.findUnique({ where: { code: 'B201' } });
+  const cancelMonth = new Date('2026-03-01');
+  if (roomB201 && !(await prisma.invoice.findFirst({ where: { code: 'INV-UTL-2026-03-B201-CANCEL' } }))) {
+    const existB201Mar = await prisma.invoice.findFirst({
+      where: { roomId: roomB201.id, billingMonth: cancelMonth, type: InvoiceType.UTILITY },
+    });
+    if (!existB201Mar) {
+      await prisma.invoice.create({
+        data: {
+          code: 'INV-UTL-2026-03-B201-CANCEL', roomId: roomB201.id, type: InvoiceType.UTILITY,
+          billingMonth: cancelMonth, roomFee: 0, electricityFee: 100000, waterFee: 0,
+          totalAmount: 100000, electricityUsage: 56, waterUsage: 5, occupantsCount: 2,
+          dueDate: new Date('2026-04-15'), status: InvoiceStatus.CANCELLED,
+        },
+      });
+    }
+  }
+
+  console.log(`✅ UTILITY invoices for Apr 2026 (PAID/PENDING/OVERDUE/CANCELLED) created`);
+
+  // ─── 11f. Hóa đơn tháng 5/2026 – tháng hiện tại (chủ yếu PENDING) ─────────
+
+  const may = new Date('2026-05-01');
+  const mayRooms = ['A101', 'A102', 'A103', 'A201', 'A202', 'B101', 'B102', 'B201', 'B202'];
+  for (const roomCode of mayRooms) {
+    const def = roomBillingDefs.find((r) => r.roomCode === roomCode)!;
+    const kWh = def.kWhBase + Math.floor(Math.random() * 15);
+    const m3  = def.m3Base  + Math.floor(Math.random() * 3);
+    await upsertUtilityInvoice({
+      code: `INV-UTL-2026-05-${roomCode}`,
+      roomCode, label: '2026-05', month: may,
+      kWh, m3, occupants: def.occupants,
+      status: InvoiceStatus.PENDING,
+    });
+  }
+  // B202 tháng 5 có minh chứng
+  const b202May = await prisma.invoice.findFirst({ where: { code: 'INV-UTL-2026-05-B202' } });
+  if (b202May) {
+    await prisma.invoice.update({
+      where: { id: b202May.id },
+      data: { paymentProof: 'https://res.cloudinary.com/dfouucs9m/image/upload/v1778422885/9216b6a3-dce5-473e-893b-9a5bb85fbbdd_ojwfr4.jpg' },
+    });
+  }
+  console.log(`✅ UTILITY invoices for May 2026 (current month, PENDING) created`);
+
+  // ─── 11g. Meter readings (để staff có thể test tạo hóa đơn mới qua UI) ────
+
+  const meterMonths = [
+    new Date('2026-04-01'),
+    new Date('2026-05-01'),
+  ];
+  for (const month of meterMonths) {
+    for (const r of roomBillingDefs) {
+      const room = await prisma.room.findUnique({ where: { code: r.roomCode } });
       if (!room) continue;
-
-      const invoiceCode = `INV-${inv.label}-${br.roomCode}`;
-      const existing = await prisma.invoice.findFirst({ where: { code: invoiceCode } });
-      if (existing) continue;
-
-      const electricityUsage = 80 + Math.floor(Math.random() * 40); // 80-120 kWh
-      const electricityFee = electricityUsage * 3500;
-      const waterUsage = br.occupants * 4;
-      const waterFee = br.occupants * 30000;
-      const roomFee = Number(br.rent) * br.occupants;
-      const totalAmount = roomFee + electricityFee + waterFee;
-
-      const dueDate = new Date(inv.month);
-      dueDate.setDate(20);
-
-      const paidAt = new Date(inv.month);
-      paidAt.setDate(15);
-
-      await prisma.invoice.create({
-        data: {
-          code: invoiceCode,
-          roomId: room.id,
-          billingMonth: inv.month,
-          roomFee,
-          electricityFee,
-          waterFee,
-          totalAmount,
-          electricityUsage,
-          waterUsage,
-          occupantsCount: br.occupants,
-          dueDate,
-          status: 'PAID' as any,
-          paidAt,
-          approvedById: admin.id,
-          approvedAt: paidAt,
-        },
-      });
+      for (const meterType of ['ELECTRICITY', 'WATER'] as const) {
+        const prevReading = meterType === 'ELECTRICITY' ? 1200 + Math.floor(Math.random() * 200) : 50 + Math.floor(Math.random() * 20);
+        const consumption = meterType === 'ELECTRICITY'
+          ? r.kWhBase + Math.floor(Math.random() * 15)
+          : r.m3Base  + Math.floor(Math.random() * 3);
+        const existing = await prisma.meterReading.findUnique({
+          where: { roomId_meterType_readingMonth: { roomId: room.id, meterType, readingMonth: month } },
+        });
+        if (!existing) {
+          await prisma.meterReading.create({
+            data: {
+              roomId: room.id, meterType, readingMonth: month,
+              previousReading: prevReading, currentReading: prevReading + consumption,
+              consumption, recordedById: staff.id,
+            },
+          });
+        }
+      }
     }
   }
-  console.log(`✅ Invoices for 6 months created (PAID)`);
+  console.log(`✅ Meter readings for Apr+May 2026 created`);
 
-  // Một số hóa đơn tháng hiện tại đang PENDING
-  const currentMonth = new Date('2026-04-01');
-  const pendingRooms = ['A301', 'B103', 'B203'];
-  for (const roomCode of pendingRooms) {
-    const room = await prisma.room.findUnique({ where: { code: roomCode } });
-    if (!room) continue;
-    const invoiceCode = `INV-2026-04-${roomCode}-P`;
-    const existing = await prisma.invoice.findFirst({ where: { code: invoiceCode } });
-    if (!existing) {
-      await prisma.invoice.create({
-        data: {
-          code: invoiceCode,
-          roomId: room.id,
-          billingMonth: currentMonth,
-          roomFee: Number(room.pricePerMonth),
-          electricityFee: 315000,
-          waterFee: 30000,
-          totalAmount: Number(room.pricePerMonth) + 345000,
-          electricityUsage: 90,
-          waterUsage: 4,
-          occupantsCount: 1,
-          dueDate: new Date('2026-04-20'),
-          status: 'PENDING' as any,
-        },
-      });
-    }
+  // ─── 11h. ROOM_FEE invoices cho các hợp đồng active ──────────────────────
+
+  async function upsertRoomFeeInvoice(contract: { id: number; code: string; roomId: number; startDate: Date; endDate: Date; monthlyRent: any }) {
+    const existing = await prisma.invoice.findFirst({ where: { contractId: contract.id, type: InvoiceType.ROOM_FEE } });
+    if (existing) return;
+    const start  = new Date(contract.startDate);
+    const end    = new Date(contract.endDate);
+    const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+    if (months <= 0) return;
+    const roomFee  = Math.round(Number(contract.monthlyRent) * months);
+    const waterFee = 30_000 * months;
+    const billingMonth = new Date(start); billingMonth.setDate(1);
+    const seqCount = await prisma.invoice.count({ where: { billingMonth } });
+    const code = `RF-${billingMonth.getFullYear()}${String(billingMonth.getMonth() + 1).padStart(2, '0')}-${String(seqCount + 1).padStart(4, '0')}`;
+    await prisma.invoice.create({
+      data: {
+        code, roomId: contract.roomId, contractId: contract.id,
+        type: InvoiceType.ROOM_FEE, billingMonth, roomFee,
+        electricityFee: 0, waterFee, totalAmount: roomFee + waterFee,
+        electricityUsage: 0, waterUsage: 0, occupantsCount: 1,
+        dueDate: start, status: InvoiceStatus.PAID, paidAt: start,
+        approvedById: admin.id, approvedAt: start,
+      },
+    });
   }
-  console.log(`✅ Pending invoices for current month created`);
+
+  const activeContracts = await prisma.contract.findMany({
+    where: { status: ContractStatus.ACTIVE },
+    select: { id: true, code: true, roomId: true, startDate: true, endDate: true, monthlyRent: true },
+  });
+  for (const c of activeContracts) {
+    await upsertRoomFeeInvoice(c);
+  }
+  console.log(`✅ ROOM_FEE invoices for ${activeContracts.length} active contracts created`);
 
   // Sự cố bảo trì
   const ticketDefs = [
@@ -628,22 +849,62 @@ async function main() {
 
   console.log('✅ Period stats refreshed');
 
-  // ─── 11. Settings ──────────────────────────────────────────────────────────
+  // ─── 12. Settings ──────────────────────────────────────────────────────────
 
-  await prisma.setting.upsert({ where: { key: 'water_base_price' },  update: {}, create: { key: 'water_base_price',  value: '30000', description: 'Giá khoán nước/người (VNĐ)' } });
-  await prisma.setting.upsert({ where: { key: 'electricity_price' }, update: {}, create: { key: 'electricity_price', value: '3500',  description: 'Đơn giá điện (VNĐ/kWh)' } });
+  const settingDefs = [
+    { key: 'water_base_price',       value: '30000', description: 'Giá khoán nước/người/tháng (VNĐ)' },
+    { key: 'water_per_person_monthly', value: '30000', description: 'Phí nước cố định/người/tháng' },
+    { key: 'water_quota_per_person', value: '4',     description: 'Định mức nước/người (m³)' },
+    { key: 'water_over_quota_price', value: '7000',  description: 'Giá nước vượt định mức (VNĐ/m³)' },
+    { key: 'electricity_price',      value: '3500',  description: 'Đơn giá điện (VNĐ/kWh) – dự phòng' },
+    { key: 'electricity_tier_1_limit', value: '50',  description: 'Bậc 1 điện – giới hạn (kWh)' },
+    { key: 'electricity_tier_1_price', value: '1728', description: 'Bậc 1 điện – đơn giá (VNĐ/kWh)' },
+    { key: 'electricity_tier_2_limit', value: '100', description: 'Bậc 2 điện – giới hạn (kWh)' },
+    { key: 'electricity_tier_2_price', value: '1786', description: 'Bậc 2 điện – đơn giá (VNĐ/kWh)' },
+    { key: 'electricity_tier_3_limit', value: '200', description: 'Bậc 3 điện – giới hạn (kWh)' },
+    { key: 'electricity_tier_3_price', value: '2074', description: 'Bậc 3 điện – đơn giá (VNĐ/kWh)' },
+    { key: 'electricity_tier_4_limit', value: '300', description: 'Bậc 4 điện – giới hạn (kWh)' },
+    { key: 'electricity_tier_4_price', value: '2612', description: 'Bậc 4 điện – đơn giá (VNĐ/kWh)' },
+    { key: 'electricity_tier_5_limit', value: '400', description: 'Bậc 5 điện – giới hạn (kWh)' },
+    { key: 'electricity_tier_5_price', value: '2919', description: 'Bậc 5 điện – đơn giá (VNĐ/kWh)' },
+    { key: 'electricity_tier_6_price', value: '3015', description: 'Bậc 6 điện – đơn giá (VNĐ/kWh)' },
+  ];
+  for (const s of settingDefs) {
+    await prisma.setting.upsert({ where: { key: s.key }, update: {}, create: s });
+  }
 
   console.log('\n🚀 Seed thành công!\n');
-  console.log('─── Tài khoản đăng nhập ─────────────────────────────────');
-  console.log('  Admin  : admin@dormhub.com  / 123456');
-  console.log('  Staff  : staff@dormhub.com  / 123456');
-  console.log('  SV1 K67: sv1@dormhub.com    / 123456  (hộ nghèo, 15đ – có đơn HK1 APPROVED)');
-  console.log('  SV2 K67: sv2@dormhub.com    / 123456  (mồ côi+GPA, 25đ – PENDING HK2)');
-  console.log('  SV3 K67: sv3@dormhub.com    / 123456  (chính sách, 10đ – PENDING HK2)');
-  console.log('  SV4 K67: sv4@dormhub.com    / 123456  (đang ở B101 – gia hạn PENDING HK2)');
-  console.log('  SV5 K66: sv5@dormhub.com    / 123456  (0đ – bị từ chối HK1, PENDING HK2)');
-  console.log('  SV6 K67: sv6@dormhub.com    / 123456  (0đ – doc pending, PENDING HK2)');
-  console.log('─────────────────────────────────────────────────────────');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('  TÀI KHOẢN ĐĂNG NHẬP  (mật khẩu: 123456)');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('  [ADMIN]  admin@dormhub.com');
+  console.log('  [STAFF]  staff@dormhub.com');
+  console.log('───────────────────────────────────────────────────────────');
+  console.log('  SINH VIÊN – có hợp đồng ACTIVE + hóa đơn:');
+  console.log('  sv1@dormhub.com   Phòng A102 – trưởng phòng – HĐ HD-2026-011');
+  console.log('  sv2@dormhub.com   Phòng A103 – trưởng phòng – HĐ HD-2026-012');
+  console.log('  sv3@dormhub.com   Phòng B102 – thành viên  – HĐ HD-2026-013');
+  console.log('  sv4@dormhub.com   Phòng B101 – trưởng phòng – HĐ HD-2024-004');
+  console.log('  sv7@dormhub.com   Phòng A101 – trưởng phòng – HĐ HD-2026-001');
+  console.log('  sv8@dormhub.com   Phòng A101 – thành viên  – HĐ HD-2026-002');
+  console.log('  sv9@dormhub.com   Phòng A101 – thành viên  – HĐ HD-2026-003');
+  console.log('  sv10@dormhub.com  Phòng A201 – trưởng phòng – HĐ HD-2026-004');
+  console.log('  sv12@dormhub.com  Phòng B201 – trưởng phòng – HĐ HD-2026-006');
+  console.log('  sv14@dormhub.com  Phòng B102 – trưởng phòng – HĐ HD-2026-008');
+  console.log('  sv15@dormhub.com  Phòng B202 – trưởng phòng – HĐ HD-2026-009');
+  console.log('───────────────────────────────────────────────────────────');
+  console.log('  SINH VIÊN – chờ duyệt đơn (chưa có HĐ HK2):');
+  console.log('  sv5@dormhub.com   0đ – bị từ chối HK1, PENDING HK2');
+  console.log('  sv6@dormhub.com   0đ – doc pending, PENDING HK2');
+  console.log('───────────────────────────────────────────────────────────');
+  console.log('  HÓA ĐƠN MẪU ĐỂ TEST:');
+  console.log('  • PAID   : INV-UTL-2026-03-A101, INV-UTL-2026-04-A101');
+  console.log('  • PENDING (có proof): INV-UTL-2026-04-A103, INV-UTL-2026-04-B102');
+  console.log('  • PENDING (không proof): INV-UTL-2026-04-A202, INV-UTL-2026-05-*');
+  console.log('  • OVERDUE: INV-UTL-2026-04-B202');
+  console.log('  • CANCELLED: INV-UTL-2026-03-B201-CANCEL');
+  console.log('  • ROOM_FEE: RF-202602-000x (tự động tạo theo HĐ)');
+  console.log('═══════════════════════════════════════════════════════════');
 }
 
 main()
