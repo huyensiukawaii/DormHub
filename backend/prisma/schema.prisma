@@ -482,7 +482,7 @@ model MaintenanceTicket {
   description String?
   images      Json? // URLs ảnh đính kèm
 
-  priority TicketPriority @default(NORMAL)
+  priority TicketPriority?
   status   TicketStatus   @default(NEW)
 
   handledById     Int?      @map("handled_by")

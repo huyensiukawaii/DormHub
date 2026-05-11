@@ -15,6 +15,7 @@ import { MetersModule } from './modules/meters/meters.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UsersModule } from './modules/users/users.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { TicketsModule } from './modules/tickets/tickets.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
     SettingsModule,
     UsersModule,
     InvoicesModule,
+    TicketsModule,
   ],
 })
 export class AppModule {}
