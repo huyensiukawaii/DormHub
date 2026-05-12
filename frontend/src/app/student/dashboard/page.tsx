@@ -141,7 +141,10 @@ export default function StudentDashboard() {
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Current room */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <Link
+          href="/student/room"
+          className="bg-white rounded-xl border border-slate-200 p-5 hover:border-amber-300 hover:shadow-sm transition-all block"
+        >
           <div className="flex items-start justify-between">
             <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
               <Home className="w-5 h-5 text-slate-600" />
@@ -161,7 +164,7 @@ export default function StudentDashboard() {
           ) : (
             <p className="text-sm text-slate-400 mt-1">Chưa có phòng</p>
           )}
-        </div>
+        </Link>
 
         {/* Contract */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">

@@ -17,6 +17,7 @@ import { UsersModule } from './modules/users/users.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { RoomTransfersModule } from './modules/room-transfers/room-transfers.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     InvoicesModule,
     TicketsModule,
     NotificationsModule,
+    RoomTransfersModule,
   ],
 })
 export class AppModule {}

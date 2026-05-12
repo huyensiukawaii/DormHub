@@ -130,6 +130,13 @@ enum InvoiceType {
   UTILITY
 }
 
+enum RoomTransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 // =============================================
 // MODELS
 // =============================================
@@ -161,6 +168,7 @@ model User {
   reviewedDocuments          PriorityDocument[]        @relation("ReviewedDocuments")
   assignedBuildings          UserBuilding[]
   assignedBuildingsBy        UserBuilding[]            @relation("AssignedByUser")
+  reviewedTransfers          RoomTransferRequest[]
 
   @@map("users")
 }
@@ -208,6 +216,9 @@ model Room {
   renewalApplications  RegistrationApplication[] @relation("CurrentRoom")
   approvedApplications RegistrationApplication[] @relation("ApprovedRoom")
 
+  transfersFrom RoomTransferRequest[] @relation("FromRoom")
+  transfersTo   RoomTransferRequest[] @relation("ToRoom")
+
   @@index([buildingId])
   @@index([status])
   @@map("rooms")
@@ -238,11 +249,12 @@ model Student {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user              User                      @relation(fields: [userId], references: [id])
-  applications      RegistrationApplication[]
-  contracts         Contract[]
-  tickets           MaintenanceTicket[]
-  priorityDocuments PriorityDocument[]
+  user                 User                      @relation(fields: [userId], references: [id])
+  applications         RegistrationApplication[]
+  contracts            Contract[]
+  tickets              MaintenanceTicket[]
+  priorityDocuments    PriorityDocument[]
+  roomTransferRequests RoomTransferRequest[]
 
   @@index([studentCode])
   @@map("students")
@@ -597,4 +609,29 @@ model PriorityDocument {
   @@index([studentId])
   @@index([status])
   @@map("priority_documents")
+}
+
+// 17. RoomTransferRequest - Yêu cầu chuyển phòng
+model RoomTransferRequest {
+  id              Int                @id @default(autoincrement())
+  code            String             @unique
+  studentId       Int                @map("student_id")
+  fromRoomId      Int                @map("from_room_id")
+  toRoomId        Int                @map("to_room_id")
+  reason          String
+  status          RoomTransferStatus @default(PENDING)
+  rejectionReason String?            @map("rejection_reason")
+  reviewedById    Int?               @map("reviewed_by_id")
+  reviewedAt      DateTime?          @map("reviewed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  student    Student @relation(fields: [studentId], references: [id])
+  fromRoom   Room    @relation("FromRoom", fields: [fromRoomId], references: [id])
+  toRoom     Room    @relation("ToRoom", fields: [toRoomId], references: [id])
+  reviewedBy User?   @relation(fields: [reviewedById], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@map("room_transfer_requests")
 }

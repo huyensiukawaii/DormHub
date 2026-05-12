@@ -19,6 +19,7 @@ import {
   Settings,
   Building2,
   ClipboardCheck,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { getStoredUser, clearAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -34,12 +35,14 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Trang chủ', href: '/student/dashboard', icon: Home },
   { label: 'Hồ sơ cá nhân', href: '/student/profile', icon: User },
+  { label: 'Phòng của tôi', href: '/student/room', icon: Home },
   { label: 'Đăng ký KTX', href: '/student/register', icon: ClipboardList },
   { label: 'Đơn đăng ký', href: '/student/applications', icon: FileText },
   { label: 'Hướng dẫn nhận phòng', href: '/student/check-in-guide', icon: ClipboardCheck },
   { label: 'Hợp đồng', href: '/student/contracts', icon: FileSignature },
   { label: 'Hóa đơn', href: '/student/invoices', icon: Receipt },
   { label: 'Báo sự cố', href: '/student/tickets', icon: Wrench },
+  { label: 'Chuyển phòng', href: '/student/room-transfer', icon: ArrowRightLeft },
   { label: 'Thông báo', href: '/student/notifications', icon: Bell },
 ];
 
@@ -114,12 +117,12 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100">
+        <div className="h-16 flex-shrink-0 flex items-center justify-between px-4 border-b border-slate-100">
           <Link href="/student/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
               <Building2 className="w-5 h-5 text-amber-600" />
@@ -135,7 +138,7 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
         </div>
 
         {/* Student info card */}
-        <div className="p-4 border-b border-slate-100">
+        <div className="flex-shrink-0 p-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-semibold">
               {studentInfo?.fullName?.charAt(0) || 'S'}
