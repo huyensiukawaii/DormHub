@@ -34,7 +34,13 @@ export class NotificationsService {
         select: { id: true },
       }),
       this.prisma.userBuilding.findMany({
-        where: { buildingId },
+        where: {
+          buildingId,
+          user: {
+            isActive: true,
+            role: 'STAFF',
+          },
+        },
         select: { userId: true },
       }),
     ]);
@@ -94,7 +100,8 @@ export class NotificationsService {
   async markRead(id: number, userId: number) {
     const notif = await this.prisma.notification.findUnique({ where: { id } });
     if (!notif) throw new NotFoundException('Không tìm thấy thông báo');
-    if (notif.userId !== userId) throw new ForbiddenException();
+    if (notif.userId !== userId)
+      throw new ForbiddenException('Bạn không có quyền truy cập thông báo này');
 
     if (notif.isRead) return notif;
     return this.prisma.notification.update({
@@ -114,7 +121,8 @@ export class NotificationsService {
   async deleteOne(id: number, userId: number) {
     const notif = await this.prisma.notification.findUnique({ where: { id } });
     if (!notif) throw new NotFoundException('Không tìm thấy thông báo');
-    if (notif.userId !== userId) throw new ForbiddenException();
+    if (notif.userId !== userId)
+      throw new ForbiddenException('Bạn không có quyền xóa thông báo này');
     await this.prisma.notification.delete({ where: { id } });
     return { success: true };
   }

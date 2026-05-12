@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck, Loader2, ArrowRight } from 'lucide-react';
 import { api } from '@/lib/api';
+import { timeAgo } from '@/lib/timeAgo';
 
 interface Notification {
   id: number;
@@ -22,17 +23,6 @@ interface Props {
   allHref: string;
   referenceLinks?: Record<string, (id: number) => string>;
   onCountChange?: (count: number) => void;
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Vừa xong';
-  if (mins < 60) return `${mins} phút trước`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} giờ trước`;
-  const days = Math.floor(hours / 24);
-  return `${days} ngày trước`;
 }
 
 const TYPE_DOT: Record<string, string> = {
@@ -95,6 +85,13 @@ export default function NotificationDropdown({
     fetchUnreadCount();
   }, [fetchUnreadCount]);
 
+  // Re-sync badge when the full notifications page mutates (mark read / delete)
+  useEffect(() => {
+    const handler = () => fetchUnreadCount();
+    window.addEventListener('notification-updated', handler);
+    return () => window.removeEventListener('notification-updated', handler);
+  }, [fetchUnreadCount]);
+
   // Open dropdown
   const handleToggle = () => {
     if (!open) fetchNotifications();
@@ -118,7 +115,11 @@ export default function NotificationDropdown({
     if (!n.isRead) {
       api.patch(`/notifications/${n.id}/read`).catch(() => {});
       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
-      setUnreadCount((c) => Math.max(0, c - 1));
+      setUnreadCount((c) => {
+        const nextCount = Math.max(0, c - 1);
+        onCountChange?.(nextCount);
+        return nextCount;
+      });
     }
     if (n.referenceType && n.referenceId) {
       const linkFn = referenceLinks[n.referenceType];

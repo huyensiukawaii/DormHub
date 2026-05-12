@@ -726,18 +726,23 @@ export class ContractsService implements OnModuleInit {
         select: { id: true, code: true, studentId: true, endDate: true },
       });
 
-      for (const contract of expiring) {
-        this.notifications.notifyStudent(contract.studentId, {
-          title,
-          content: `${content} (Hết hạn: ${new Date(contract.endDate).toLocaleDateString('vi-VN')})`,
-          type: 'SYSTEM',
-          referenceType: 'Contract',
-          referenceId: contract.id,
-        }).catch(() => {});
-      }
-
       if (expiring.length > 0) {
-        console.log(`[CRON] Expiry reminder (${days}d): notified ${expiring.length} students`);
+        const results = await Promise.allSettled(
+          expiring.map((contract) =>
+            this.notifications.notifyStudent(contract.studentId, {
+              title,
+              content: `${content} (Hết hạn: ${new Date(contract.endDate).toLocaleDateString('vi-VN')})`,
+              type: 'SYSTEM',
+              referenceType: 'Contract',
+              referenceId: contract.id,
+            }),
+          ),
+        );
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        console.log(
+          `[CRON] Expiry reminder (${days}d): notified ${expiring.length - failed}/${expiring.length} students` +
+            (failed > 0 ? ` (${failed} failed)` : ''),
+        );
       }
     }
   }

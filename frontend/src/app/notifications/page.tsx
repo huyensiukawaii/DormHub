@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import { Bell, CheckCheck, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
+import { timeAgo } from '@/lib/timeAgo';
 
 interface Notification {
   id: number;
@@ -44,19 +45,8 @@ const REFERENCE_LINKS: Record<string, (id: number) => string> = {
   Ticket: (id) => `/tickets/${id}`,
   Invoice: (id) => `/invoices/${id}`,
   Application: (id) => `/applications/${id}`,
+  Contract: (id) => `/contracts/${id}`,
 };
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Vừa xong';
-  if (mins < 60) return `${mins} phút trước`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} giờ trước`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} ngày trước`;
-  return new Date(dateStr).toLocaleDateString('vi-VN');
-}
 
 export default function AdminNotificationsPage() {
   const router = useRouter();
@@ -98,6 +88,7 @@ export default function AdminNotificationsPage() {
         prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n)),
       );
       setUnreadCount((c) => Math.max(0, c - 1));
+      window.dispatchEvent(new CustomEvent('notification-updated'));
     }
 
     if (notif.referenceType && notif.referenceId) {
@@ -108,9 +99,14 @@ export default function AdminNotificationsPage() {
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
+    const deletedNotification = notifications.find((n) => n.id === id);
     await api.delete(`/notifications/${id}`).catch(() => {});
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-    setTotal((t) => t - 1);
+    setTotal((t) => Math.max(0, t - 1));
+    if (deletedNotification && !deletedNotification.isRead) {
+      setUnreadCount((c) => Math.max(0, c - 1));
+      window.dispatchEvent(new CustomEvent('notification-updated'));
+    }
   };
 
   const handleMarkAllRead = async () => {
@@ -119,6 +115,7 @@ export default function AdminNotificationsPage() {
       await api.patch('/notifications/read-all');
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
+      window.dispatchEvent(new CustomEvent('notification-updated'));
     } finally {
       setMarkingAll(false);
     }

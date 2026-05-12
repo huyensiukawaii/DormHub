@@ -24,7 +24,6 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { getStoredUser, clearAuth, type User } from '@/lib/auth';
-import { api } from '@/lib/api';
 import NotificationDropdown from '@/components/NotificationDropdown';
 
 interface NavItem {
@@ -305,6 +304,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 Ticket: (id) => `/tickets/${id}`,
                 Invoice: (id) => `/invoices/${id}`,
                 Application: (id) => `/applications/${id}`,
+                Contract: (id) => `/contracts/${id}`,
               }}
             />
 

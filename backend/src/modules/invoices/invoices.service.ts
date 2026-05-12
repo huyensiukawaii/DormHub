@@ -456,14 +456,32 @@ export class InvoicesService {
       data: { status: 'OVERDUE' },
     });
 
-    for (const inv of toOverdue) {
-      this.notifications.notifyRoomLeader(inv.roomId, {
-        title: 'Hóa đơn quá hạn thanh toán',
-        content: `Hóa đơn ${inv.code} đã quá hạn. Vui lòng thanh toán sớm để tránh phát sinh thêm.`,
-        type: 'INVOICE',
-        referenceType: 'Invoice',
-        referenceId: inv.id,
-      }).catch(() => {});
+    if (toOverdue.length > 0) {
+      const uniqueRoomIds = [...new Set(toOverdue.map((inv) => inv.roomId))];
+      const leaders = await this.prisma.contract.findMany({
+        where: { roomId: { in: uniqueRoomIds }, status: 'ACTIVE', isRoomLeader: true },
+        select: { roomId: true, student: { select: { userId: true } } },
+      });
+      const leaderUserIdByRoom = new Map(
+        leaders.filter((l) => l.student).map((l) => [l.roomId, l.student!.userId]),
+      );
+      const notifRecords = toOverdue
+        .map((inv) => {
+          const userId = leaderUserIdByRoom.get(inv.roomId);
+          if (!userId) return null;
+          return {
+            userId,
+            title: 'Hóa đơn quá hạn thanh toán',
+            content: `Hóa đơn ${inv.code} đã quá hạn. Vui lòng thanh toán sớm để tránh phát sinh thêm.`,
+            type: 'INVOICE',
+            referenceType: 'Invoice',
+            referenceId: inv.id,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      if (notifRecords.length > 0) {
+        await this.prisma.notification.createMany({ data: notifRecords });
+      }
     }
 
     return { marked: result.count };
