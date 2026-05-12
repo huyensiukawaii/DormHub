@@ -24,6 +24,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { getStoredUser, clearAuth, type User } from '@/lib/auth';
+import { api } from '@/lib/api';
+import NotificationDropdown from '@/components/NotificationDropdown';
 
 interface NavItem {
   label: string;
@@ -74,6 +76,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Hệ thống',
     items: [
       { label: 'Nhân viên', href: '/staff', icon: Users, staffLabel: 'Tòa của tôi' },
+      { label: 'Thông báo', href: '/notifications', icon: Bell },
       { label: 'Cài đặt', href: '/settings', icon: Settings, adminOnly: true },
     ],
   },
@@ -89,7 +92,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [user, setUser] = useState<User | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notificationCount] = useState(3);
 
   // Mở nhóm chứa trang active, thu các nhóm khác lại
   const getInitialCollapsed = () => {
@@ -126,6 +128,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       return;
     }
     setUser(storedUser);
+
   }, [router]);
 
   const handleLogout = () => {
@@ -295,14 +298,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
-              <Bell className="w-5 h-5" />
-              {notificationCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {notificationCount}
-                </span>
-              )}
-            </button>
+            <NotificationDropdown
+              accent="emerald"
+              allHref="/notifications"
+              referenceLinks={{
+                Ticket: (id) => `/tickets/${id}`,
+                Invoice: (id) => `/invoices/${id}`,
+                Application: (id) => `/applications/${id}`,
+              }}
+            />
 
             <div className="relative">
               <button

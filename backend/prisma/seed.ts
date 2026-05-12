@@ -1024,6 +1024,99 @@ async function main() {
     await prisma.setting.upsert({ where: { key: s.key }, update: {}, create: s });
   }
 
+  // ─── 13. Notifications (test data) ────────────────────────────────────────
+
+  await prisma.notification.deleteMany({});
+
+  // Lookup references
+  const [tk001, tk002, tk003, tk004, tk005, tk007, tk009, tk013] = await Promise.all([
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-001' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-002' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-003' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-004' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-005' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-007' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-009' } }),
+    prisma.maintenanceTicket.findFirst({ where: { code: 'TK-2026-013' } }),
+  ]);
+
+  const [invA102Apr, invA102May, invA103Apr, invB101May] = await Promise.all([
+    prisma.invoice.findFirst({ where: { code: { contains: 'INV-UTL-2026-04-A102' } } }),
+    prisma.invoice.findFirst({ where: { code: { contains: 'INV-UTL-2026-05-A102' } } }),
+    prisma.invoice.findFirst({ where: { code: { contains: 'INV-UTL-2026-04-A103' } } }),
+    prisma.invoice.findFirst({ where: { code: { contains: 'INV-UTL-2026-05-B101' } } }),
+  ]);
+
+  // Lookup applications
+  const [appSv1, appSv2, appSv5, appSv6] = await Promise.all([
+    prisma.registrationApplication.findFirst({ where: { student: { userId: uSv1.id } }, orderBy: { createdAt: 'desc' } }),
+    prisma.registrationApplication.findFirst({ where: { student: { userId: uSv2.id } }, orderBy: { createdAt: 'desc' } }),
+    prisma.registrationApplication.findFirst({ where: { student: { userId: uSv5.id } }, orderBy: { createdAt: 'desc' } }),
+    prisma.registrationApplication.findFirst({ where: { student: { userId: uSv6.id } }, orderBy: { createdAt: 'desc' } }),
+  ]);
+
+  // Lookup contracts
+  const [ctSv1, ctSv2, ctSv3, ctSv4] = await Promise.all([
+    prisma.contract.findFirst({ where: { student: { userId: uSv1.id }, status: 'ACTIVE' } }),
+    prisma.contract.findFirst({ where: { student: { userId: uSv2.id }, status: 'ACTIVE' } }),
+    prisma.contract.findFirst({ where: { student: { userId: uSv3.id }, status: 'ACTIVE' } }),
+    prisma.contract.findFirst({ where: { student: { userId: uSv4.id }, status: 'ACTIVE' } }),
+  ]);
+
+  const seedNow = new Date();
+  const ago = (m: number) => new Date(seedNow.getTime() - m * 60 * 1000);
+
+  const notifDefs = [
+    // ═══ ADMIN & STAFF: ticket mới ═══════════════════════════════════════════
+    ...(tk001 ? [
+      { userId: admin.id, title: 'Yêu cầu sửa chữa mới — MỨC KHẨN', content: 'Phạm Thị Dung - Phòng B101: Điều hòa không lạnh, phòng 6 người không ngủ được', type: 'TICKET', referenceType: 'Ticket', referenceId: tk001.id, isRead: false, createdAt: ago(8) },
+      { userId: staff.id, title: 'Yêu cầu sửa chữa mới — MỨC KHẨN', content: 'Phạm Thị Dung - Phòng B101: Điều hòa không lạnh, phòng 6 người không ngủ được', type: 'TICKET', referenceType: 'Ticket', referenceId: tk001.id, isRead: false, createdAt: ago(8) },
+    ] : []),
+    ...(tk003 ? [
+      { userId: admin.id, title: 'Yêu cầu sửa chữa mới', content: 'Nguyễn Văn An - Phòng A102: Bóng đèn nhà vệ sinh không sáng', type: 'TICKET', referenceType: 'Ticket', referenceId: tk003.id, isRead: false, createdAt: ago(45) },
+      { userId: staff.id, title: 'Yêu cầu sửa chữa mới', content: 'Nguyễn Văn An - Phòng A102: Bóng đèn nhà vệ sinh không sáng', type: 'TICKET', referenceType: 'Ticket', referenceId: tk003.id, isRead: true, createdAt: ago(45), readAt: ago(30) },
+    ] : []),
+    ...(tk007 ? [
+      { userId: admin.id, title: 'Yêu cầu sửa chữa mới', content: 'Nguyễn Văn An - Phòng A102: Vòi nước bị chảy liên tục', type: 'TICKET', referenceType: 'Ticket', referenceId: tk007.id, isRead: true, createdAt: ago(180), readAt: ago(120) },
+      { userId: staff.id, title: 'Yêu cầu sửa chữa mới', content: 'Nguyễn Văn An - Phòng A102: Vòi nước bị chảy liên tục', type: 'TICKET', referenceType: 'Ticket', referenceId: tk007.id, isRead: true, createdAt: ago(180), readAt: ago(170) },
+    ] : []),
+
+    // ═══ sv1 (Nguyễn Văn An) ════════════════════════════════════════════════
+    // Ticket
+    ...(tk002 ? [{ userId: uSv1.id, title: 'Yêu cầu sửa chữa đang được xử lý', content: 'Ban quản lý đang xử lý TK-2026-002 của bạn', type: 'TICKET', referenceType: 'Ticket', referenceId: tk002.id, isRead: false, createdAt: ago(20) }] : []),
+    ...(tk009 ? [{ userId: uSv1.id, title: 'Yêu cầu sửa chữa đã hoàn thành ✓', content: 'TK-2026-009 đã xong. Hãy để lại đánh giá!', type: 'TICKET', referenceType: 'Ticket', referenceId: tk009.id, isRead: true, createdAt: ago(2880), readAt: ago(2800) }] : []),
+    // Hợp đồng
+    ...(ctSv1 ? [{ userId: uSv1.id, title: 'Hợp đồng ký túc xá đã được tạo', content: `Hợp đồng ${ctSv1.code} — Phòng A102 (Tòa A). Hiệu lực từ ${new Date(ctSv1.startDate).toLocaleDateString('vi-VN')}.`, type: 'SYSTEM', referenceType: 'Contract', referenceId: ctSv1.id, isRead: true, createdAt: ago(21600), readAt: ago(21500) }] : []),
+    // Hóa đơn tiện ích tháng 4
+    ...(invA102Apr ? [{ userId: uSv1.id, title: 'Hóa đơn tiện ích tháng 4/2026 đã phát sinh', content: `Phòng A102: ${Number(invA102Apr.totalAmount).toLocaleString('vi-VN')}đ — hạn nộp 15/05/2026`, type: 'INVOICE', referenceType: 'Invoice', referenceId: invA102Apr.id, isRead: true, createdAt: ago(10080), readAt: ago(9000) }] : []),
+    // Hóa đơn tiện ích tháng 5 (chưa đọc)
+    ...(invA102May ? [{ userId: uSv1.id, title: 'Hóa đơn tiện ích tháng 5/2026 đã phát sinh', content: `Phòng A102: ${Number(invA102May.totalAmount).toLocaleString('vi-VN')}đ — hạn nộp 15/06/2026`, type: 'INVOICE', referenceType: 'Invoice', referenceId: invA102May.id, isRead: false, createdAt: ago(1440) }] : []),
+    // Đơn đăng ký được duyệt
+    ...(appSv1 ? [{ userId: uSv1.id, title: 'Đơn đăng ký KTX đã được duyệt ✓', content: 'Chúc mừng! Đơn đăng ký của bạn đã được chấp thuận. Hợp đồng đã được tạo.', type: 'REGISTRATION', referenceType: 'Application', referenceId: appSv1.id, isRead: true, createdAt: ago(21700), readAt: ago(21600) }] : []),
+
+    // ═══ sv2 (Trần Minh Bảo) ════════════════════════════════════════════════
+    ...(tk004 ? [{ userId: uSv2.id, title: 'Yêu cầu sửa chữa đang được xử lý', content: 'Ban quản lý đang xử lý TK-2026-004 của bạn', type: 'TICKET', referenceType: 'Ticket', referenceId: tk004.id, isRead: false, createdAt: ago(60) }] : []),
+    ...(tk005 ? [{ userId: uSv2.id, title: 'Yêu cầu sửa chữa đã hoàn thành ✓', content: 'TK-2026-005 đã hoàn thành. Bạn còn 5 ngày để đánh giá.', type: 'TICKET', referenceType: 'Ticket', referenceId: tk005.id, isRead: false, createdAt: ago(360) }] : []),
+    ...(ctSv2 ? [{ userId: uSv2.id, title: 'Hợp đồng ký túc xá đã được tạo', content: `Hợp đồng ${ctSv2.code} — Phòng A103 (Tòa A). Hiệu lực từ ${new Date(ctSv2.startDate).toLocaleDateString('vi-VN')}.`, type: 'SYSTEM', referenceType: 'Contract', referenceId: ctSv2.id, isRead: true, createdAt: ago(21600), readAt: ago(21500) }] : []),
+    ...(invA103Apr ? [{ userId: uSv2.id, title: 'Hóa đơn tiện ích tháng 4/2026 đã phát sinh', content: `Phòng A103: ${Number(invA103Apr.totalAmount).toLocaleString('vi-VN')}đ — hạn nộp 15/05/2026`, type: 'INVOICE', referenceType: 'Invoice', referenceId: invA103Apr.id, isRead: false, createdAt: ago(10080) }] : []),
+    ...(appSv2 ? [{ userId: uSv2.id, title: 'Đơn đăng ký KTX đã được duyệt ✓', content: 'Chúc mừng! Đơn đăng ký của bạn đã được chấp thuận. Hợp đồng đã được tạo.', type: 'REGISTRATION', referenceType: 'Application', referenceId: appSv2.id, isRead: true, createdAt: ago(21700), readAt: ago(21600) }] : []),
+
+    // ═══ sv3 (Lê Thị Cẩm) ═══════════════════════════════════════════════════
+    ...(ctSv3 ? [{ userId: uSv3.id, title: 'Hợp đồng ký túc xá đã được tạo', content: `Hợp đồng ${ctSv3.code} — Phòng B102 (Tòa B). Hiệu lực từ ${new Date(ctSv3.startDate).toLocaleDateString('vi-VN')}.`, type: 'SYSTEM', referenceType: 'Contract', referenceId: ctSv3.id, isRead: true, createdAt: ago(21600), readAt: ago(21500) }] : []),
+
+    // ═══ sv4 (Phạm Thị Dung) ════════════════════════════════════════════════
+    ...(tk013 ? [{ userId: uSv4.id, title: 'Yêu cầu sửa chữa bị từ chối', content: 'Yêu cầu TK-2026-013 không được chấp thuận. Xem lý do chi tiết.', type: 'TICKET', referenceType: 'Ticket', referenceId: tk013.id, isRead: false, createdAt: ago(1440) }] : []),
+    ...(invB101May ? [{ userId: uSv4.id, title: 'Hóa đơn tiện ích tháng 5/2026 đã phát sinh', content: `Phòng B101: ${Number(invB101May.totalAmount).toLocaleString('vi-VN')}đ — hạn nộp 15/06/2026`, type: 'INVOICE', referenceType: 'Invoice', referenceId: invB101May.id, isRead: false, createdAt: ago(1440) }] : []),
+    ...(ctSv4 ? [{ userId: uSv4.id, title: 'Hợp đồng ký túc xá đã được tạo', content: `Hợp đồng ${ctSv4.code} — Phòng B101 (Tòa B). Hiệu lực từ ${new Date(ctSv4.startDate).toLocaleDateString('vi-VN')}.`, type: 'SYSTEM', referenceType: 'Contract', referenceId: ctSv4.id, isRead: true, createdAt: ago(30000), readAt: ago(29900) }] : []),
+
+    // ═══ sv5/sv6: đơn bị từ chối / đang chờ ═════════════════════════════════
+    ...(appSv5 ? [{ userId: uSv5.id, title: 'Đơn đăng ký KTX không được chấp thuận', content: 'Đơn đăng ký học kỳ 1 của bạn không đạt tiêu chí xét duyệt.', type: 'REGISTRATION', referenceType: 'Application', referenceId: appSv5.id, isRead: true, createdAt: ago(43200), readAt: ago(43000) }] : []),
+    ...(appSv6 ? [{ userId: uSv6.id, title: 'Đơn đăng ký KTX đang chờ xét duyệt', content: 'Đơn đăng ký của bạn đã được tiếp nhận và đang trong hàng chờ xét duyệt.', type: 'REGISTRATION', referenceType: 'Application', referenceId: appSv6.id, isRead: false, createdAt: ago(2880) }] : []),
+  ];
+
+  await prisma.notification.createMany({ data: notifDefs });
+  console.log(`✅ Notifications: ${notifDefs.length} thông báo seed`);
+
   console.log('\n🚀 Seed thành công!\n');
   console.log('═══════════════════════════════════════════════════════════');
   console.log('  TÀI KHOẢN ĐĂNG NHẬP  (mật khẩu: 123456)');

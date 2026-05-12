@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { getStoredUser, clearAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
+import NotificationDropdown from '@/components/NotificationDropdown';
 
 interface NavItem {
   label: string;
@@ -53,7 +54,7 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(2);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -83,6 +84,7 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
         currentRoom: null,
       });
     });
+
   }, [router]);
 
   const handleLogout = () => {
@@ -213,14 +215,16 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
 
           <div className="flex items-center gap-3">
             {/* Notifications */}
-            <button className="relative p-2 hover:bg-slate-100 rounded-lg">
-              <Bell className="w-5 h-5 text-slate-600" />
-              {notificationCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
-                  {notificationCount}
-                </span>
-              )}
-            </button>
+            <NotificationDropdown
+              accent="amber"
+              allHref="/student/notifications"
+              onCountChange={setNotificationCount}
+              referenceLinks={{
+                Ticket: (id) => `/student/tickets/${id}`,
+                Invoice: (id) => `/student/invoices/${id}`,
+                Application: (id) => `/student/applications/${id}`,
+              }}
+            />
 
             {/* User menu */}
             <div className="relative">

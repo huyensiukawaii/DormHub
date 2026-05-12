@@ -10,6 +10,7 @@ import { RegistrationPeriodsService } from '../registration-periods/registration
 import { ContractsService } from '../contracts/contracts.service';
 import { MailerService } from '../mailer/mailer.service';
 import { ConfigService } from '@nestjs/config';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateApplicationDto,
   UpdateApplicationStatusDto,
@@ -72,6 +73,7 @@ export class StudentApplicationsService {
     private contractsService: ContractsService,
     private mailerService: MailerService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // ========================================
@@ -666,6 +668,24 @@ export class StudentApplicationsService {
 
     // Gửi email thông báo kết quả (fire-and-forget, không block response)
     this.sendResultEmail(updated, dto.status).catch(() => {});
+
+    if (dto.status === 'APPROVED') {
+      this.notificationsService.notifyStudent(application.studentId, {
+        title: 'Đơn đăng ký KTX đã được duyệt ✓',
+        content: 'Chúc mừng! Đơn đăng ký của bạn đã được chấp thuận. Hợp đồng đã được tạo.',
+        type: 'REGISTRATION',
+        referenceType: 'Application',
+        referenceId: id,
+      }).catch(() => {});
+    } else if (dto.status === 'REJECTED') {
+      this.notificationsService.notifyStudent(application.studentId, {
+        title: 'Đơn đăng ký KTX không được chấp thuận',
+        content: updateData.rejectionReason ?? 'Đơn của bạn không đạt tiêu chí xét duyệt',
+        type: 'REGISTRATION',
+        referenceType: 'Application',
+        referenceId: id,
+      }).catch(() => {});
+    }
 
     return this.transformToResponse(updated);
   }

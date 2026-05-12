@@ -4,9 +4,10 @@ import { StudentApplicationsService } from './student-application.service';
 import { RegistrationPeriodsModule } from '../registration-periods/registration-periods.module';
 import { ContractsModule } from '../contracts/contracts.module';
 import { MailerModule } from '../mailer/mailer.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [RegistrationPeriodsModule, ContractsModule, MailerModule],
+  imports: [RegistrationPeriodsModule, ContractsModule, MailerModule, NotificationsModule],
   controllers: [StudentApplicationsController, AdminApplicationsController, AdminDashboardController],
   providers: [StudentApplicationsService],
   exports: [StudentApplicationsService],
