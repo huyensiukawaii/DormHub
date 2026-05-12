@@ -16,6 +16,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { UsersModule } from './modules/users/users.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { TicketsModule } from './modules/tickets/tickets.module';
     UsersModule,
     InvoicesModule,
     TicketsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

@@ -8,12 +8,16 @@ import {
   CreateTicketDto, UpdateTicketDto, RejectTicketDto,
   RateTicketDto, QueryTicketDto,
 } from './dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MAX_OPEN_TICKETS = 3;
 
 @Injectable()
 export class TicketsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   // ========================================
   // STUDENT: Tạo ticket
@@ -36,7 +40,7 @@ export class TicketsService {
       where: { id: studentId }, select: { fullName: true },
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const ticket = await tx.maintenanceTicket.create({
         data: {
           code: `PENDING-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -61,6 +65,9 @@ export class TicketsService {
       });
       return updated;
     });
+
+    this.notifyAdminsNewTicket(created.id, contract.roomId, student?.fullName ?? 'Sinh viên', created.title).catch(() => {});
+    return created;
   }
 
   // ========================================
@@ -137,13 +144,18 @@ export class TicketsService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.maintenanceTicket.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.maintenanceTicket.update({
         where: { id }, data, include: this.defaultInclude(),
       });
       if (logs.length > 0) await tx.ticketLog.createMany({ data: logs });
-      return updated;
+      return result;
     });
+
+    if (dto.status && dto.status !== ticket.status) {
+      this.notifyStudentStatusChanged(ticket.reportedById, id, dto.status).catch(() => {});
+    }
+    return updated;
   }
 
   // ========================================
@@ -161,8 +173,8 @@ export class TicketsService {
 
     const user = await this.prisma.user.findUnique({ where: { id: handledById }, select: { fullName: true } });
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.maintenanceTicket.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.maintenanceTicket.update({
         where: { id },
         data: { status: 'REJECTED', rejectionReason: dto.rejectionReason, handledById, handledAt: new Date() },
         include: this.defaultInclude(),
@@ -170,8 +182,11 @@ export class TicketsService {
       await tx.ticketLog.create({
         data: { ticketId: id, action: 'STATUS_CHANGED', from: ticket.status, to: 'REJECTED', actorName: user?.fullName ?? 'Ban quản lý' },
       });
-      return updated;
+      return result;
     });
+
+    this.notifyStudentStatusChanged(ticket.reportedById, id, 'REJECTED').catch(() => {});
+    return updated;
   }
 
   // ========================================
@@ -381,5 +396,45 @@ export class TicketsService {
     if (!room || !allowedBuildingIds.includes(room.buildingId)) {
       throw new ForbiddenException('Bạn không có quyền truy cập dữ liệu tòa này');
     }
+  }
+
+  // ========================================
+  // NOTIFICATION HELPERS (fire-and-forget)
+  // ========================================
+
+  private async notifyAdminsNewTicket(ticketId: number, roomId: number, studentName: string, ticketTitle: string) {
+    const room = await this.prisma.room.findUnique({ where: { id: roomId }, select: { buildingId: true, code: true } });
+    if (!room) return;
+    const userIds = await this.notifications.getAdminAndBuildingStaffIds(room.buildingId);
+    await this.notifications.createMany(userIds, {
+      title: 'Yêu cầu sửa chữa mới',
+      content: `${studentName} - Phòng ${room.code}: ${ticketTitle}`,
+      type: 'TICKET',
+      referenceType: 'Ticket',
+      referenceId: ticketId,
+    });
+  }
+
+  private async notifyStudentStatusChanged(studentId: number, ticketId: number, newStatus: string) {
+    const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { userId: true } });
+    if (!student) return;
+
+    const statusMessages: Record<string, { title: string; content?: string }> = {
+      IN_PROGRESS: { title: 'Yêu cầu sửa chữa đang được xử lý' },
+      COMPLETED:   { title: 'Sự cố đã được xử lý xong — hãy đánh giá!', content: 'Bạn có 7 ngày để đánh giá chất lượng xử lý. Phản hồi giúp chúng tôi cải thiện dịch vụ.' },
+      REJECTED:    { title: 'Yêu cầu sửa chữa bị từ chối' },
+    };
+    const msg = statusMessages[newStatus];
+    if (!msg) return;
+    const { title, content } = msg;
+
+    await this.notifications.create({
+      userId: student.userId,
+      title,
+      content,
+      type: 'TICKET',
+      referenceType: 'Ticket',
+      referenceId: ticketId,
+    });
   }
 }

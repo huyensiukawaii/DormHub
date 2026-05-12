@@ -9,6 +9,7 @@ import {
 import { assertAllowed } from '@/common/utils/building-access';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { InvoicesService } from '../invoices/invoices.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
   CreateContractDto,
@@ -25,6 +26,7 @@ export class ContractsService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private invoices: InvoicesService,
+    private notifications: NotificationsService,
   ) {}
 
   async onModuleInit() {
@@ -270,6 +272,14 @@ export class ContractsService implements OnModuleInit {
       }
       await this.invoices.createRoomFeeInvoice({ ...contract });
     }
+
+    this.notifications.notifyStudent(contract.studentId, {
+      title: 'Hợp đồng ký túc xá đã được tạo',
+      content: `Hợp đồng ${contract.code} — Phòng ${contract.room.code} (${contract.room.building.name}). Hiệu lực từ ${new Date(contract.startDate).toLocaleDateString('vi-VN')}.`,
+      type: 'SYSTEM',
+      referenceType: 'Contract',
+      referenceId: contract.id,
+    }).catch(() => {});
 
     return contract;
   }
@@ -562,6 +572,14 @@ export class ContractsService implements OnModuleInit {
       await this.autoPromoteLeader(contract.roomId, id);
     }
 
+    this.notifications.notifyStudent(contract.studentId, {
+      title: 'Hợp đồng ký túc xá đã bị chấm dứt',
+      content: `Hợp đồng ${updated.code} đã bị chấm dứt trước hạn. ${dto.terminationReason ? 'Lý do: ' + dto.terminationReason : ''}`.trim(),
+      type: 'SYSTEM',
+      referenceType: 'Contract',
+      referenceId: id,
+    }).catch(() => {});
+
     return updated;
   }
 
@@ -682,6 +700,51 @@ export class ContractsService implements OnModuleInit {
     });
 
     return { total, active, expired, terminated, notCheckedIn, expiringCount };
+  }
+
+  // ========================================
+  // NHẮC HẾT HẠN HỢP ĐỒNG (CRON — 8:00 sáng hằng ngày)
+  // ========================================
+  @Cron('0 8 * * *')
+  async notifyExpiringContracts() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const thresholds = [
+      { days: 30, title: 'Hợp đồng KTX sắp hết hạn (còn 30 ngày)', content: 'Hợp đồng của bạn sẽ hết hạn sau 30 ngày. Hãy nộp đơn gia hạn sớm để đảm bảo chỗ ở.' },
+      { days: 14, title: 'Hợp đồng KTX sắp hết hạn (còn 14 ngày)', content: 'Hợp đồng của bạn còn 14 ngày nữa là hết hạn. Vui lòng liên hệ ban quản lý ngay để gia hạn hoặc làm thủ tục trả phòng.' },
+    ];
+
+    for (const { days, title, content } of thresholds) {
+      const targetDay = new Date(today);
+      targetDay.setDate(targetDay.getDate() + days);
+      const nextDay = new Date(targetDay);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const expiring = await this.prisma.contract.findMany({
+        where: { status: 'ACTIVE', endDate: { gte: targetDay, lt: nextDay } },
+        select: { id: true, code: true, studentId: true, endDate: true },
+      });
+
+      if (expiring.length > 0) {
+        const results = await Promise.allSettled(
+          expiring.map((contract) =>
+            this.notifications.notifyStudent(contract.studentId, {
+              title,
+              content: `${content} (Hết hạn: ${new Date(contract.endDate).toLocaleDateString('vi-VN')})`,
+              type: 'SYSTEM',
+              referenceType: 'Contract',
+              referenceId: contract.id,
+            }),
+          ),
+        );
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        console.log(
+          `[CRON] Expiry reminder (${days}d): notified ${expiring.length - failed}/${expiring.length} students` +
+            (failed > 0 ? ` (${failed} failed)` : ''),
+        );
+      }
+    }
   }
 
   // ========================================

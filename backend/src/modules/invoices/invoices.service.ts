@@ -10,12 +10,14 @@ import {
   ConfirmPaymentDto, UploadProofDto, QueryInvoiceDto, RejectProofDto,
 } from './dto';
 import { Contract, InvoiceStatus, Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private prisma: PrismaService,
     private settings: SettingsService,
+    private notifications: NotificationsService,
   ) {}
 
   // ========================================
@@ -182,7 +184,7 @@ export class InvoicesService {
 
     const code = this.generateCode('INV-UTL', billingMonth, room.code);
 
-    return this.prisma.invoice.create({
+    const invoice = await this.prisma.invoice.create({
       data: {
         code,
         roomId,
@@ -200,6 +202,17 @@ export class InvoicesService {
       },
       include: this.defaultInclude(),
     });
+
+    const monthLabel = `${billingMonth.getMonth() + 1}/${billingMonth.getFullYear()}`;
+    this.notifications.notifyRoomLeader(roomId, {
+      title: `Hóa đơn tiện ích tháng ${monthLabel} đã phát sinh`,
+      content: `Phòng ${room.code}: ${totalAmount.toLocaleString('vi-VN')}đ — hạn nộp ${dueDate.toLocaleDateString('vi-VN')}`,
+      type: 'INVOICE',
+      referenceType: 'Invoice',
+      referenceId: invoice.id,
+    }).catch(() => {});
+
+    return invoice;
   }
 
   // ========================================
@@ -239,7 +252,7 @@ export class InvoicesService {
       throw new BadRequestException('Không thể từ chối hóa đơn đã thanh toán hoặc đã hủy');
     }
 
-    return this.prisma.invoice.update({
+    const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
         paymentProof: null,
@@ -248,6 +261,16 @@ export class InvoicesService {
       },
       include: this.defaultInclude(),
     });
+
+    this.notifications.notifyRoomLeader(invoice.roomId, {
+      title: 'Minh chứng thanh toán bị từ chối',
+      content: dto.rejectionNote ?? 'Vui lòng kiểm tra lại và nộp lại minh chứng',
+      type: 'INVOICE',
+      referenceType: 'Invoice',
+      referenceId: id,
+    }).catch(() => {});
+
+    return updated;
   }
 
   // ========================================
@@ -420,13 +443,47 @@ export class InvoicesService {
   // ========================================
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async markOverdue() {
+    const overdueWhere = { status: 'PENDING' as InvoiceStatus, dueDate: { lt: new Date() } };
+
+    // Collect before updating so we can notify
+    const toOverdue = await this.prisma.invoice.findMany({
+      where: overdueWhere,
+      select: { id: true, roomId: true, code: true },
+    });
+
     const result = await this.prisma.invoice.updateMany({
-      where: {
-        status: 'PENDING',
-        dueDate: { lt: new Date() },
-      },
+      where: overdueWhere,
       data: { status: 'OVERDUE' },
     });
+
+    if (toOverdue.length > 0) {
+      const uniqueRoomIds = [...new Set(toOverdue.map((inv) => inv.roomId))];
+      const leaders = await this.prisma.contract.findMany({
+        where: { roomId: { in: uniqueRoomIds }, status: 'ACTIVE', isRoomLeader: true },
+        select: { roomId: true, student: { select: { userId: true } } },
+      });
+      const leaderUserIdByRoom = new Map(
+        leaders.filter((l) => l.student).map((l) => [l.roomId, l.student!.userId]),
+      );
+      const notifRecords = toOverdue
+        .map((inv) => {
+          const userId = leaderUserIdByRoom.get(inv.roomId);
+          if (!userId) return null;
+          return {
+            userId,
+            title: 'Hóa đơn quá hạn thanh toán',
+            content: `Hóa đơn ${inv.code} đã quá hạn. Vui lòng thanh toán sớm để tránh phát sinh thêm.`,
+            type: 'INVOICE',
+            referenceType: 'Invoice',
+            referenceId: inv.id,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      if (notifRecords.length > 0) {
+        await this.prisma.notification.createMany({ data: notifRecords });
+      }
+    }
+
     return { marked: result.count };
   }
 
