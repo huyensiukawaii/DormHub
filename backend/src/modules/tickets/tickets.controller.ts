@@ -102,6 +102,13 @@ export class TicketsController {
     return this.service.create(dto, req.user.studentId);
   }
 
+  @Get('student/stats')
+  @Roles('STUDENT')
+  @ApiOperation({ summary: 'Thống kê ticket của tôi + số slot còn lại' })
+  async getStudentStats(@Request() req: any) {
+    return this.service.getStudentStats(req.user.studentId);
+  }
+
   @Get('student/my')
   @Roles('STUDENT')
   @ApiOperation({ summary: 'Danh sách ticket của tôi' })
@@ -114,6 +121,13 @@ export class TicketsController {
   @ApiOperation({ summary: 'Chi tiết ticket của tôi' })
   async findOneStudent(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.service.findOneStudent(id, req.user.studentId);
+  }
+
+  @Patch('student/my/:id/cancel')
+  @Roles('STUDENT')
+  @ApiOperation({ summary: 'Hủy ticket (chỉ khi status = NEW)' })
+  async cancel(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.cancel(id, req.user.studentId);
   }
 
   @Patch('student/my/:id/rate')

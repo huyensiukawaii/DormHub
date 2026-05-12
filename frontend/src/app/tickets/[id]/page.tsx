@@ -5,12 +5,12 @@ import { useRouter, useParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   Wrench, ArrowLeft, Loader2, AlertCircle, CheckCircle, Clock,
-  XCircle, AlertTriangle, Star, User, Building2, Calendar,
+  XCircle, AlertTriangle, Star, User, History,
   ClipboardList, MessageSquare, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
-type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED';
+type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 type TicketPriority = 'LOW' | 'NORMAL' | 'URGENT';
 type TicketCategory = 'ELECTRICAL' | 'PLUMBING' | 'AIR_CONDITIONER' | 'DOOR_LOCK' | 'FURNITURE' | 'OTHER';
 
@@ -35,6 +35,7 @@ interface Ticket {
   room: { id: number; code: string; building: { id: number; code: string; name: string } };
   reportedBy: { id: number; fullName: string; studentCode: string };
   handledBy: { id: number; fullName: string } | null;
+  logs: { id: number; action: string; from: string | null; to: string | null; actorName: string | null; createdAt: string }[];
 }
 
 const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; bg: string; icon: any }> = {
@@ -42,6 +43,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; bg: st
   IN_PROGRESS: { label: 'Đang xử lý',  color: 'text-amber-700',   bg: 'bg-amber-100',   icon: AlertCircle },
   COMPLETED:   { label: 'Hoàn thành',  color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle },
   REJECTED:    { label: 'Từ chối',     color: 'text-red-700',     bg: 'bg-red-100',     icon: XCircle },
+  CANCELLED:   { label: 'Đã hủy',      color: 'text-slate-500',   bg: 'bg-slate-100',   icon: XCircle },
 };
 
 const PRIORITY_CONFIG: Record<TicketPriority, { label: string; color: string; bg: string }> = {
@@ -110,8 +112,9 @@ export default function TicketDetailPage() {
     setUpdating(true);
     try {
       const body: any = {};
+      const normalizedPriority = updatePriority === '' ? null : updatePriority;
       if (updateStatus !== ticket.status) body.status = updateStatus;
-      if (updatePriority && updatePriority !== ticket.priority) body.priority = updatePriority;
+      if (normalizedPriority !== (ticket.priority ?? null)) body.priority = normalizedPriority;
       if (updateNote !== (ticket.resolutionNote ?? '')) body.resolutionNote = updateNote;
       await api.patch(`/tickets/${id}`, body);
       setShowUpdate(false);
@@ -162,7 +165,7 @@ export default function TicketDetailPage() {
   const sc = STATUS_CONFIG[ticket.status];
   const pc = getPriority(ticket.priority);
   const SIcon = sc.icon;
-  const canEdit = ticket.status !== 'COMPLETED' && ticket.status !== 'REJECTED';
+  const canEdit = ticket.status !== 'COMPLETED' && ticket.status !== 'REJECTED' && ticket.status !== 'CANCELLED';
 
   return (
     <AdminLayout>
@@ -314,6 +317,36 @@ export default function TicketDetailPage() {
                 <User className="w-4 h-4 text-slate-400" /> Nhân viên xử lý
               </h2>
               <p className="text-sm font-medium text-slate-800">{ticket.handledBy.fullName}</p>
+            </div>
+          )}
+
+          {/* Log timeline */}
+          {ticket.logs && ticket.logs.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <History className="w-4 h-4 text-slate-400" /> Lịch sử
+              </h2>
+              <div className="relative pl-4">
+                <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-200" />
+                <div className="space-y-4">
+                  {ticket.logs.map((log) => (
+                    <div key={log.id} className="relative">
+                      <div className="absolute -left-[11px] top-1 w-2.5 h-2.5 rounded-full bg-white border-2 border-slate-300" />
+                      <p className="text-xs font-medium text-slate-700 leading-snug">
+                        {log.action === 'CREATED'       && 'Yêu cầu được tạo'}
+                        {log.action === 'STATUS_CHANGED' && `Chuyển trạng thái: ${log.from} → ${log.to}`}
+                        {log.action === 'PRIORITY_SET'  && `Phân loại ưu tiên: ${log.from ?? '—'} → ${log.to}`}
+                        {log.action === 'NOTE_UPDATED'  && 'Cập nhật ghi chú xử lý'}
+                        {log.action === 'CANCELLED'     && 'Sinh viên hủy yêu cầu'}
+                      </p>
+                      {log.actorName && (
+                        <p className="text-xs text-slate-400 mt-0.5">{log.actorName}</p>
+                      )}
+                      <p className="text-xs text-slate-300 mt-0.5">{fmtDateTime(log.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>

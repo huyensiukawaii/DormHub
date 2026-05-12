@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
-type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED';
+type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 type TicketCategory = 'ELECTRICAL' | 'PLUMBING' | 'AIR_CONDITIONER' | 'DOOR_LOCK' | 'FURNITURE' | 'OTHER';
 type TicketPriority = 'LOW' | 'NORMAL' | 'URGENT';
 
@@ -20,7 +20,7 @@ interface Ticket {
   description: string | null;
   images: string[];
   category: TicketCategory;
-  priority: TicketPriority;
+  priority: TicketPriority | null;
   status: TicketStatus;
   resolutionNote: string | null;
   rejectionReason: string | null;
@@ -39,6 +39,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; bg: st
   IN_PROGRESS: { label: 'Đang xử lý',  color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200',   icon: AlertCircle },
   COMPLETED:   { label: 'Hoàn thành',  color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', icon: CheckCircle },
   REJECTED:    { label: 'Từ chối',     color: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200',     icon: XCircle },
+  CANCELLED:   { label: 'Đã hủy',      color: 'text-slate-500',   bg: 'bg-slate-50',   border: 'border-slate-200',   icon: XCircle },
 };
 
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
@@ -59,6 +60,24 @@ export default function StudentTicketDetailPage() {
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Cancel state
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  const handleCancel = async () => {
+    if (!confirm('Bạn có chắc muốn hủy yêu cầu này không?')) return;
+    setCancelling(true);
+    setCancelError('');
+    try {
+      await api.patch(`/tickets/student/my/${id}/cancel`);
+      fetchTicket();
+    } catch (err: any) {
+      setCancelError(err.response?.data?.message || 'Có lỗi xảy ra');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   // Rating state
   const [ratingValue, setRatingValue]     = useState(0);
@@ -142,7 +161,7 @@ export default function StudentTicketDetailPage() {
       {/* Status banner */}
       <div className={`mb-5 p-4 rounded-xl border ${sc.bg} ${sc.border} flex items-center gap-3`}>
         <SIcon className={`w-6 h-6 ${sc.color} flex-shrink-0`} />
-        <div>
+        <div className="flex-1">
           <p className={`text-sm font-semibold ${sc.color}`}>{sc.label}</p>
           {ticket.status === 'IN_PROGRESS' && ticket.handledBy && (
             <p className="text-xs text-slate-600 mt-0.5">Đang được xử lý bởi: {ticket.handledBy.fullName}</p>
@@ -151,7 +170,20 @@ export default function StudentTicketDetailPage() {
             <p className="text-xs text-slate-600 mt-0.5">Hoàn thành lúc: {fmtDateTime(ticket.completedAt)}</p>
           )}
         </div>
+        {ticket.status === 'NEW' && (
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-50 rounded-lg flex items-center gap-1.5"
+          >
+            {cancelling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+            Hủy yêu cầu
+          </button>
+        )}
       </div>
+      {cancelError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{cancelError}</div>
+      )}
 
       <div className="space-y-4">
         {/* Ticket details */}

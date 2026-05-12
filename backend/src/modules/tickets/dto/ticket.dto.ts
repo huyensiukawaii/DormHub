@@ -1,8 +1,8 @@
 import {
-  IsInt, IsOptional, IsString, IsEnum, IsArray,
+  IsInt, IsOptional, IsString, IsEnum, IsArray, IsBoolean, IsIn,
   Min, Max, MaxLength, ArrayMaxSize,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TicketCategory, TicketStatus, TicketPriority } from '@prisma/client';
 
@@ -47,7 +47,7 @@ export class UpdateTicketDto {
   @ApiPropertyOptional({ enum: TicketPriority })
   @IsOptional()
   @IsEnum(TicketPriority)
-  priority?: TicketPriority;
+  priority?: TicketPriority | null;
 
   @ApiPropertyOptional({ example: 'Đã liên hệ thợ điện, hẹn 14h chiều nay' })
   @IsOptional()
@@ -137,6 +137,12 @@ export class QueryTicketDto {
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+  @ApiPropertyOptional({ description: 'Chỉ lấy ticket đang hoạt động (NEW, IN_PROGRESS)' })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  activeOnly?: boolean;
 }

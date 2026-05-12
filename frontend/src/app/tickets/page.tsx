@@ -5,12 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
 import {
   Wrench, Search, ChevronRight, Loader2, AlertCircle,
-  CheckCircle, Clock, XCircle, Eye, RefreshCw, X,
-  AlertTriangle, Star,
+  CheckCircle, Clock, XCircle, Eye, RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
-type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED';
+type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 type TicketPriority = 'LOW' | 'NORMAL' | 'URGENT';
 type TicketCategory = 'ELECTRICAL' | 'PLUMBING' | 'AIR_CONDITIONER' | 'DOOR_LOCK' | 'FURNITURE' | 'OTHER';
 
@@ -29,6 +29,7 @@ interface Ticket {
 
 interface Stats {
   counts: { new: number; inProgress: number; completed: number; rejected: number; total: number };
+  newUnhandled: number;
   urgentPending: number;
   rating: { average: number | null; count: number };
 }
@@ -38,6 +39,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; bg: st
   IN_PROGRESS: { label: 'Đang xử lý',   color: 'text-amber-700',   bg: 'bg-amber-100',   icon: AlertCircle },
   COMPLETED:   { label: 'Hoàn thành',   color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle },
   REJECTED:    { label: 'Từ chối',      color: 'text-red-700',     bg: 'bg-red-100',     icon: XCircle },
+  CANCELLED:   { label: 'Đã hủy',       color: 'text-slate-500',   bg: 'bg-slate-100',   icon: XCircle },
 };
 
 const PRIORITY_CONFIG: Record<TicketPriority, { label: string; color: string; bg: string }> = {
@@ -70,7 +72,7 @@ function TicketsPage() {
   const [buildings, setBuildings] = useState<{ id: number; name: string }[]>([]);
 
   const [search, setSearch]             = useState(sp.get('search') ?? '');
-  const [filterStatus, setFilterStatus] = useState(sp.get('status') ?? '');
+  const [filterStatus, setFilterStatus] = useState(sp.get('status') ?? 'ACTIVE');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterBuilding, setFilterBuilding] = useState('');
@@ -94,9 +96,10 @@ function TicketsPage() {
     try {
       setLoading(true);
       const p = new URLSearchParams({ page: String(page), limit: String(limit) });
-      if (search)          p.append('search', search);
-      if (filterStatus)    p.append('status', filterStatus);
-      if (filterCategory)  p.append('category', filterCategory);
+      if (search)                        p.append('search', search);
+      if (filterStatus === 'ACTIVE')     p.append('activeOnly', 'true');
+      else if (filterStatus)             p.append('status', filterStatus);
+      if (filterCategory)                p.append('category', filterCategory);
       if (filterPriority)  p.append('priority', filterPriority);
       if (filterBuilding)  p.append('buildingId', filterBuilding);
       const res = await api.get(`/tickets?${p}`);
@@ -114,7 +117,7 @@ function TicketsPage() {
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
 
   const resetFilters = () => {
-    setSearch(''); setFilterStatus(''); setFilterCategory('');
+    setSearch(''); setFilterStatus('ACTIVE'); setFilterCategory('');
     setFilterPriority(''); setFilterBuilding(''); setPage(1);
   };
 
@@ -130,7 +133,7 @@ function TicketsPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
             <p className="text-2xl font-bold text-slate-800">{stats.counts.total}</p>
             <p className="text-xs text-slate-500">Tổng</p>
@@ -146,6 +149,10 @@ function TicketsPage() {
           <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 text-center">
             <p className="text-2xl font-bold text-emerald-600">{stats.counts.completed}</p>
             <p className="text-xs text-emerald-700">Hoàn thành</p>
+          </div>
+          <div className="bg-orange-50 rounded-xl border border-orange-200 p-4 text-center">
+            <p className="text-2xl font-bold text-orange-600">{stats.newUnhandled}</p>
+            <p className="text-xs text-orange-700">Chưa có ai nhận</p>
           </div>
           <div className="bg-red-50 rounded-xl border border-red-200 p-4 text-center">
             <p className="text-2xl font-bold text-red-600">{stats.urgentPending}</p>
@@ -190,11 +197,13 @@ function TicketsPage() {
             />
           </div>
           <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
-            <option value="">Tất cả trạng thái</option>
+            <option value="ACTIVE">Đang hoạt động</option>
+            <option value="">Tất cả</option>
             <option value="NEW">Mới</option>
             <option value="IN_PROGRESS">Đang xử lý</option>
             <option value="COMPLETED">Hoàn thành</option>
             <option value="REJECTED">Từ chối</option>
+            <option value="CANCELLED">Đã hủy</option>
           </select>
           <select value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }} className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
             <option value="">Tất cả loại</option>

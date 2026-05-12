@@ -5,11 +5,11 @@ import Link from 'next/link';
 import StudentLayout from '@/components/layouts/StudentLayout';
 import {
   Wrench, CheckCircle, Clock, AlertCircle, XCircle,
-  Loader2, ChevronRight, Plus, AlertTriangle,
+  Loader2, ChevronRight, Plus, AlertTriangle, Ticket,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
-type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED';
+type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 type TicketCategory = 'ELECTRICAL' | 'PLUMBING' | 'AIR_CONDITIONER' | 'DOOR_LOCK' | 'FURNITURE' | 'OTHER';
 
 interface Ticket {
@@ -29,6 +29,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; bg: st
   IN_PROGRESS: { label: 'Đang xử lý',  color: 'text-amber-700',   bg: 'bg-amber-100',   icon: AlertCircle },
   COMPLETED:   { label: 'Hoàn thành',  color: 'text-emerald-700', bg: 'bg-emerald-100', icon: CheckCircle },
   REJECTED:    { label: 'Từ chối',     color: 'text-red-700',     bg: 'bg-red-100',     icon: XCircle },
+  CANCELLED:   { label: 'Đã hủy',      color: 'text-slate-500',   bg: 'bg-slate-100',   icon: XCircle },
 };
 
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
@@ -52,14 +53,25 @@ const CATEGORY_ICON_COLOR: Record<TicketCategory, string> = {
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+interface StudentStats {
+  counts: { new: number; inProgress: number; completed: number; rejected: number; cancelled: number };
+  openCount: number;
+  openSlots: number;
+}
+
 export default function StudentTicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [stats, setStats] = useState<StudentStats | null>(null);
   const [loading, setLoading]         = useState(true);
   const [filterStatus, setFilterStatus]   = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [page, setPage]               = useState(1);
   const [totalPages, setTotalPages]   = useState(1);
   const limit = 20;
+
+  useEffect(() => {
+    api.get('/tickets/student/stats').then((r) => setStats(r.data)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetch = async () => {
@@ -80,11 +92,9 @@ export default function StudentTicketsPage() {
     fetch();
   }, [page, filterStatus, filterCategory]);
 
-  const pending = tickets.filter((t) => t.status === 'NEW' || t.status === 'IN_PROGRESS');
-
   return (
     <StudentLayout>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Báo sự cố</h1>
           <p className="text-sm text-slate-500 mt-1">Yêu cầu sửa chữa phòng ở</p>
@@ -97,13 +107,57 @@ export default function StudentTicketsPage() {
         </Link>
       </div>
 
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+            <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Clock className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-slate-800">{stats.counts.new}</p>
+              <p className="text-xs text-slate-500">Mới</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+            <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-slate-800">{stats.counts.inProgress}</p>
+              <p className="text-xs text-slate-500">Đang xử lý</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+            <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-slate-800">{stats.counts.completed}</p>
+              <p className="text-xs text-slate-500">Hoàn thành</p>
+            </div>
+          </div>
+          <div className={`rounded-xl border p-4 flex items-center gap-3 ${stats.openSlots === 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${stats.openSlots === 0 ? 'bg-red-100' : 'bg-slate-50'}`}>
+              <Ticket className={`w-4 h-4 ${stats.openSlots === 0 ? 'text-red-600' : 'text-slate-500'}`} />
+            </div>
+            <div>
+              <p className={`text-lg font-bold ${stats.openSlots === 0 ? 'text-red-700' : 'text-slate-800'}`}>{stats.openSlots}/3</p>
+              <p className={`text-xs ${stats.openSlots === 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                {stats.openSlots === 0 ? 'Đã đầy slot' : 'Slot còn lại'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pending alert */}
-      {!loading && pending.length > 0 && (
+      {stats && stats.openCount > 0 && (
         <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-amber-800">
-              Bạn có {pending.length} sự cố đang chờ/xử lý
+              Bạn có {stats.openCount} sự cố đang chờ/xử lý
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
               Theo dõi tiến trình xử lý của ban quản lý KTX.

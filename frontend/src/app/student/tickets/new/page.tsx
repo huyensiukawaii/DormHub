@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Loader2, Wrench, Plus, X, Zap, Droplets,
+  ArrowLeft, Loader2, Wrench, X, Zap, Droplets,
   Wind, Lock, Sofa, HelpCircle, Building2, ImagePlus,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -29,6 +29,9 @@ export default function CreateTicketPage() {
   const [error, setError]         = useState('');
   const [roomInfo, setRoomInfo]   = useState<{ code: string; buildingName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imagesRef = useRef(images);
+  useEffect(() => { imagesRef.current = images; }, [images]);
+  useEffect(() => () => { imagesRef.current.forEach((img) => URL.revokeObjectURL(img.preview)); }, []);
 
   useEffect(() => {
     api.get('/auth/me').then((res) => {
@@ -65,7 +68,7 @@ export default function CreateTicketPage() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!category) { setError('Vui lòng chọn danh mục sự cố'); return; }
     if (!title.trim()) { setError('Vui lòng nhập tiêu đề'); return; }

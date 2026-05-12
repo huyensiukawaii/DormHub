@@ -801,7 +801,7 @@ async function main() {
   //   sv7(extraStudents[0]) → A101 | sv10(extraStudents[3]) → A201
   //   sv12(extraStudents[5]) → B201 | sv15(extraStudents[8]) → B202
 
-  const now7dAgo  = new Date(Date.now() - 3  * 24 * 60 * 60 * 1000); // 3 ngày trước (còn trong 7-ngày rating)
+  const now3dAgo  = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // 3 ngày trước (còn trong 7-ngày rating)
   const now14dAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000); // 14 ngày trước (quá hạn rating)
 
   type TicketSeedDef = {
@@ -873,7 +873,7 @@ async function main() {
       title: 'Quạt trần kêu to',
       description: 'Quạt trần phòng kêu tiếng ồn khi quay, khó ngủ vào ban đêm.',
       resolutionNote: 'Đã tra dầu mỡ vào ổ bi quạt, quạt chạy êm trở lại.',
-      completedAt: now7dAgo,
+      completedAt: now3dAgo,
       handledById: staff.id,
     },
     {
@@ -882,7 +882,7 @@ async function main() {
       title: 'Tắc cống nhà tắm',
       description: 'Cống nhà tắm bị tắc, nước không thoát được sau khi tắm.',
       resolutionNote: 'Đã thông cống, nguyên nhân do tóc tích tụ. Đã dọn sạch.',
-      completedAt: now7dAgo,
+      completedAt: now3dAgo,
       handledById: staff.id,
     },
 
