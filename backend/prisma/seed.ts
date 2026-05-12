@@ -506,11 +506,16 @@ async function main() {
   const semesterStart = new Date('2026-02-10');
   const semesterEnd   = new Date('2026-06-30');
 
+  // Dùng findUnique để lấy roomId chắc chắn đúng (tránh cache biến bị sai ID)
+  const roomA102 = await prisma.room.findUniqueOrThrow({ where: { code: 'A102' } });
+  const roomA103 = await prisma.room.findUniqueOrThrow({ where: { code: 'A103' } });
+  const roomB102 = await prisma.room.findUniqueOrThrow({ where: { code: 'B102' } });
+
   const sv1Contract = await prisma.contract.upsert({
     where: { code: 'HD-2026-011' },
-    update: {},
+    update: { status: ContractStatus.ACTIVE, roomId: roomA102.id },
     create: {
-      code: 'HD-2026-011', studentId: sv1.id, roomId: rA102.id,
+      code: 'HD-2026-011', studentId: sv1.id, roomId: roomA102.id,
       startDate: semesterStart, endDate: semesterEnd,
       monthlyRent: 350000, status: ContractStatus.ACTIVE,
       checkedInAt: semesterStart, isRoomLeader: true, createdById: admin.id,
@@ -518,9 +523,9 @@ async function main() {
   });
   const sv2Contract = await prisma.contract.upsert({
     where: { code: 'HD-2026-012' },
-    update: {},
+    update: { status: ContractStatus.ACTIVE, roomId: roomA103.id },
     create: {
-      code: 'HD-2026-012', studentId: sv2.id, roomId: rA103.id,
+      code: 'HD-2026-012', studentId: sv2.id, roomId: roomA103.id,
       startDate: semesterStart, endDate: semesterEnd,
       monthlyRent: 550000, status: ContractStatus.ACTIVE,
       checkedInAt: semesterStart, isRoomLeader: true, createdById: admin.id,
@@ -528,9 +533,9 @@ async function main() {
   });
   const sv3Contract = await prisma.contract.upsert({
     where: { code: 'HD-2026-013' },
-    update: {},
+    update: { status: ContractStatus.ACTIVE, roomId: roomB102.id },
     create: {
-      code: 'HD-2026-013', studentId: sv3.id, roomId: rB102.id,
+      code: 'HD-2026-013', studentId: sv3.id, roomId: roomB102.id,
       startDate: semesterStart, endDate: semesterEnd,
       monthlyRent: 550000, status: ContractStatus.ACTIVE,
       checkedInAt: semesterStart, isRoomLeader: false, createdById: admin.id,
@@ -790,15 +795,150 @@ async function main() {
   }
   console.log(`✅ ROOM_FEE invoices for ${activeContracts.length} active contracts created`);
 
-  // Sự cố bảo trì
-  const ticketDefs = [
-    { code: 'TK-2026-001', roomCode: 'A101', studentId: extraStudents[0].id, title: 'Điều hòa không mát', category: 'AIR_CONDITIONER', priority: 'URGENT', status: 'NEW' },
-    { code: 'TK-2026-002', roomCode: 'B101', studentId: extraStudents[5].id, title: 'Bóng đèn phòng vệ sinh hỏng', category: 'ELECTRICAL', priority: 'NORMAL', status: 'IN_PROGRESS' },
-    { code: 'TK-2026-003', roomCode: 'A201', studentId: extraStudents[3].id, title: 'Vòi nước bị rỉ', category: 'PLUMBING', priority: 'NORMAL', status: 'NEW' },
-    { code: 'TK-2026-004', roomCode: 'B202', studentId: extraStudents[8].id, title: 'Khóa cửa bị hỏng', category: 'DOOR_LOCK', priority: 'URGENT', status: 'IN_PROGRESS' },
-    { code: 'TK-2026-005', roomCode: 'A103', studentId: sv2.id, title: 'Quạt trần kêu to', category: 'ELECTRICAL', priority: 'LOW', status: 'COMPLETED' },
-    { code: 'TK-2026-006', roomCode: 'B102', studentId: sv3.id, title: 'Tủ đồ bị vỡ bản lề', category: 'FURNITURE', priority: 'LOW', status: 'NEW' },
-    { code: 'TK-2026-007', roomCode: 'A202', studentId: sv1.id, title: 'Áp lực nước yếu', category: 'PLUMBING', priority: 'NORMAL', status: 'NEW' },
+  // ─── Sự cố bảo trì (MaintenanceTicket) ───────────────────────────────────
+  // Phòng theo hợp đồng ACTIVE:
+  //   sv1 → A102 | sv2 → A103 | sv3 → B102 | sv4 → B101
+  //   sv7(extraStudents[0]) → A101 | sv10(extraStudents[3]) → A201
+  //   sv12(extraStudents[5]) → B201 | sv15(extraStudents[8]) → B202
+
+  const now3dAgo  = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // 3 ngày trước (còn trong 7-ngày rating)
+  const now14dAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000); // 14 ngày trước (quá hạn rating)
+
+  type TicketSeedDef = {
+    code: string; roomCode: string; studentId: number;
+    category: string; title: string; description?: string;
+    priority: string; status: string;
+    resolutionNote?: string; rejectionReason?: string;
+    rating?: number; ratingComment?: string;
+    completedAt?: Date; handledById?: number;
+  };
+
+  const ticketDefs: TicketSeedDef[] = [
+    // ── NEW (mới, chưa xử lý) ─────────────────────────────────────────────────
+    {
+      code: 'TK-2026-001', roomCode: 'A101', studentId: extraStudents[0].id,
+      category: 'AIR_CONDITIONER', priority: 'URGENT', status: 'NEW',
+      title: 'Điều hòa không mát',
+      description: 'Điều hòa phòng A101 chạy nhưng không ra khí lạnh, phòng rất nóng, ảnh hưởng đến sinh hoạt.',
+    },
+    {
+      code: 'TK-2026-003', roomCode: 'A201', studentId: extraStudents[3].id,
+      category: 'PLUMBING', priority: 'NORMAL', status: 'NEW',
+      title: 'Vòi nước bị rỉ',
+      description: 'Vòi nước trong nhà tắm bị rỉ nước, không vặn chặt được.',
+    },
+    {
+      code: 'TK-2026-006', roomCode: 'B102', studentId: sv3.id,
+      category: 'FURNITURE', priority: 'LOW', status: 'NEW',
+      title: 'Tủ đồ bị vỡ bản lề',
+      description: 'Cánh tủ bên trái bị tuột bản lề, không đóng được.',
+    },
+    {
+      code: 'TK-2026-007', roomCode: 'A102', studentId: sv1.id,
+      category: 'PLUMBING', priority: 'NORMAL', status: 'NEW',
+      title: 'Áp lực nước yếu',
+      description: 'Vòi hoa sen chảy rất yếu, không đủ để tắm.',
+    },
+
+    // ── IN_PROGRESS (đang xử lý) ───────────────────────────────────────────────
+    {
+      code: 'TK-2026-002', roomCode: 'B101', studentId: sv4.id,
+      category: 'ELECTRICAL', priority: 'NORMAL', status: 'IN_PROGRESS',
+      title: 'Bóng đèn phòng vệ sinh hỏng',
+      description: 'Bóng đèn phòng tắm bị đứt dây tóc, không sáng.',
+      resolutionNote: 'Đã liên hệ thợ điện, dự kiến thay bóng trong ngày hôm nay.',
+      handledById: staff.id,
+    },
+    {
+      code: 'TK-2026-004', roomCode: 'B202', studentId: extraStudents[8].id,
+      category: 'DOOR_LOCK', priority: 'URGENT', status: 'IN_PROGRESS',
+      title: 'Khóa cửa bị hỏng',
+      description: 'Khóa cửa phòng bị kẹt, không mở được từ bên ngoài. Hiện đang dùng chìa dự phòng.',
+      resolutionNote: 'Đã nhận báo cáo, thợ khóa sẽ đến kiểm tra lúc 14h chiều nay.',
+      handledById: staff.id,
+    },
+    {
+      code: 'TK-2026-010', roomCode: 'A103', studentId: sv2.id,
+      category: 'AIR_CONDITIONER', priority: 'NORMAL', status: 'IN_PROGRESS',
+      title: 'Điều hòa chảy nước',
+      description: 'Điều hòa bị chảy nước xuống sàn khi bật, có thể do tắc đường thoát nước.',
+      resolutionNote: 'Đã kiểm tra, cần vệ sinh dàn lạnh. Hẹn lịch sửa ngày mai.',
+      handledById: staff.id,
+    },
+
+    // ── COMPLETED – sinh viên CÓ THỂ đánh giá (completedAt < 7 ngày) ──────────
+    {
+      code: 'TK-2026-005', roomCode: 'A103', studentId: sv2.id,
+      category: 'ELECTRICAL', priority: 'LOW', status: 'COMPLETED',
+      title: 'Quạt trần kêu to',
+      description: 'Quạt trần phòng kêu tiếng ồn khi quay, khó ngủ vào ban đêm.',
+      resolutionNote: 'Đã tra dầu mỡ vào ổ bi quạt, quạt chạy êm trở lại.',
+      completedAt: now3dAgo,
+      handledById: staff.id,
+    },
+    {
+      code: 'TK-2026-008', roomCode: 'B201', studentId: extraStudents[5].id,
+      category: 'PLUMBING', priority: 'NORMAL', status: 'COMPLETED',
+      title: 'Tắc cống nhà tắm',
+      description: 'Cống nhà tắm bị tắc, nước không thoát được sau khi tắm.',
+      resolutionNote: 'Đã thông cống, nguyên nhân do tóc tích tụ. Đã dọn sạch.',
+      completedAt: now3dAgo,
+      handledById: staff.id,
+    },
+
+    // ── COMPLETED – sinh viên ĐÃ ĐÁNH GIÁ (có rating) ────────────────────────
+    {
+      code: 'TK-2026-009', roomCode: 'A101', studentId: extraStudents[2].id,
+      category: 'FURNITURE', priority: 'LOW', status: 'COMPLETED',
+      title: 'Giường bị gãy thanh ngang',
+      description: 'Thanh ngang bên dưới giường bị gãy, ngủ bị lún.',
+      resolutionNote: 'Đã thay thanh gỗ mới, giường chắc chắn trở lại.',
+      completedAt: now14dAgo,
+      handledById: staff.id,
+      rating: 5,
+      ratingComment: 'Xử lý rất nhanh và chuyên nghiệp, cảm ơn anh nhân viên!',
+    },
+    {
+      code: 'TK-2026-011', roomCode: 'A102', studentId: sv1.id,
+      category: 'ELECTRICAL', priority: 'NORMAL', status: 'COMPLETED',
+      title: 'Ổ cắm điện không hoạt động',
+      description: 'Ổ cắm điện gần cửa sổ không có điện, không sạc được điện thoại.',
+      resolutionNote: 'Đã kiểm tra cầu dao và sửa lại dây điện bị lỏng.',
+      completedAt: now14dAgo,
+      handledById: staff.id,
+      rating: 4,
+      ratingComment: 'Xử lý ổn, chỉ hơi lâu chút.',
+    },
+
+    // ── COMPLETED – quá 7 ngày, chưa đánh giá (hết hạn rating) ───────────────
+    {
+      code: 'TK-2026-012', roomCode: 'B102', studentId: sv3.id,
+      category: 'DOOR_LOCK', priority: 'NORMAL', status: 'COMPLETED',
+      title: 'Cửa sổ không đóng kín',
+      description: 'Cửa sổ bị cong, không đóng kín được, nước mưa hắt vào.',
+      resolutionNote: 'Đã điều chỉnh lại bản lề và gioăng cao su cửa sổ.',
+      completedAt: now14dAgo,
+      handledById: staff.id,
+      // Không có rating → hết hạn (quá 7 ngày)
+    },
+
+    // ── REJECTED (bị từ chối) ─────────────────────────────────────────────────
+    {
+      code: 'TK-2026-013', roomCode: 'B101', studentId: sv4.id,
+      category: 'OTHER', priority: 'LOW', status: 'REJECTED',
+      title: 'Yêu cầu thay thảm phòng',
+      description: 'Thảm phòng đã cũ và bẩn, muốn được thay thảm mới.',
+      rejectionReason: 'Không thuộc phạm vi bảo trì KTX. Thảm phòng là vật dụng cá nhân, sinh viên tự mua và sử dụng.',
+      handledById: staff.id,
+    },
+    {
+      code: 'TK-2026-014', roomCode: 'A103', studentId: sv2.id,
+      category: 'OTHER', priority: 'NORMAL', status: 'REJECTED',
+      title: 'Lắp thêm ổ cắm điện',
+      description: 'Phòng thiếu ổ cắm điện, muốn lắp thêm 2 ổ cắm mới.',
+      rejectionReason: 'Không thể lắp thêm ổ cắm vì liên quan đến tải điện toàn tòa nhà. Sinh viên có thể sử dụng ổ cắm mở rộng cá nhân.',
+      handledById: admin.id,
+    },
   ];
 
   for (const t of ticketDefs) {
@@ -806,6 +946,7 @@ async function main() {
     if (!room) continue;
     const existing = await prisma.maintenanceTicket.findFirst({ where: { code: t.code } });
     if (!existing) {
+      const isHandled = ['IN_PROGRESS', 'COMPLETED', 'REJECTED'].includes(t.status);
       await prisma.maintenanceTicket.create({
         data: {
           code: t.code,
@@ -813,16 +954,26 @@ async function main() {
           reportedById: t.studentId,
           category: t.category as any,
           title: t.title,
+          description: t.description,
           priority: t.priority as any,
           status: t.status as any,
-          handledById: ['IN_PROGRESS', 'COMPLETED'].includes(t.status) ? staff.id : undefined,
-          handledAt: ['IN_PROGRESS', 'COMPLETED'].includes(t.status) ? new Date() : undefined,
-          completedAt: t.status === 'COMPLETED' ? new Date() : undefined,
+          resolutionNote: t.resolutionNote,
+          rejectionReason: t.rejectionReason,
+          handledById: isHandled ? (t.handledById ?? staff.id) : undefined,
+          handledAt: isHandled ? now14dAgo : undefined,
+          completedAt: t.completedAt,
+          rating: t.rating,
+          ratingComment: t.ratingComment,
+          ratedAt: t.rating ? now14dAgo : undefined,
         },
       });
     }
   }
-  console.log(`✅ Maintenance tickets created`);
+  console.log(`✅ Maintenance tickets created (${ticketDefs.length} tickets)`);
+  console.log('  – NEW (4): TK-001, TK-003, TK-006, TK-007');
+  console.log('  – IN_PROGRESS (3): TK-002, TK-004, TK-010');
+  console.log('  – COMPLETED (5): TK-005/008 (chưa rate), TK-009/011 (đã rate), TK-012 (hết hạn)');
+  console.log('  – REJECTED (2): TK-013, TK-014');
 
   // ─── 10. Refresh period stats ──────────────────────────────────────────────
 
@@ -904,6 +1055,20 @@ async function main() {
   console.log('  • OVERDUE: INV-UTL-2026-04-B202');
   console.log('  • CANCELLED: INV-UTL-2026-03-B201-CANCEL');
   console.log('  • ROOM_FEE: RF-202602-000x (tự động tạo theo HĐ)');
+  console.log('───────────────────────────────────────────────────────────');
+  console.log('  TICKET MẪU ĐỂ TEST:');
+  console.log('  Admin/Staff → /tickets');
+  console.log('  • NEW     : TK-2026-001(URGENT), TK-003, TK-006, TK-007');
+  console.log('  • IN_PROG : TK-002(có note), TK-004(URGENT+note), TK-010');
+  console.log('  • COMPLETED (chưa rate, còn hạn 7 ngày): TK-005, TK-008');
+  console.log('  • COMPLETED (đã rate 4-5★): TK-009, TK-011');
+  console.log('  • COMPLETED (hết hạn rate): TK-012');
+  console.log('  • REJECTED (có lý do): TK-013, TK-014');
+  console.log('  Sinh viên test tạo ticket → cần HĐ ACTIVE:');
+  console.log('  sv1@dormhub.com  → tạo ticket phòng A102 (TK-007, TK-011 có sẵn)');
+  console.log('  sv2@dormhub.com  → tạo ticket phòng A103 (TK-005, TK-010, TK-014 có sẵn)');
+  console.log('  sv3@dormhub.com  → tạo ticket phòng B102 (TK-006, TK-012 có sẵn)');
+  console.log('  sv4@dormhub.com  → tạo ticket phòng B101 (TK-002, TK-013 có sẵn)');
   console.log('═══════════════════════════════════════════════════════════');
 }
 

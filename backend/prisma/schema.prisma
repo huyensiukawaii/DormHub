@@ -101,6 +101,7 @@ enum TicketStatus {
   IN_PROGRESS
   COMPLETED
   REJECTED
+  CANCELLED
 }
 
 enum TicketPriority {
@@ -482,7 +483,7 @@ model MaintenanceTicket {
   description String?
   images      Json? // URLs ảnh đính kèm
 
-  priority TicketPriority @default(NORMAL)
+  priority TicketPriority?
   status   TicketStatus   @default(NEW)
 
   handledById     Int?      @map("handled_by")
@@ -502,11 +503,27 @@ model MaintenanceTicket {
   room       Room    @relation(fields: [roomId], references: [id])
   reportedBy Student @relation(fields: [reportedById], references: [id])
   handledBy  User?   @relation("HandledBy", fields: [handledById], references: [id])
+  logs       TicketLog[]
 
   @@index([roomId])
   @@index([reportedById])
   @@index([status])
   @@map("maintenance_tickets")
+}
+
+// 12b. TicketLog - Lịch sử thay đổi ticket
+model TicketLog {
+  id        Int               @id @default(autoincrement())
+  ticketId  Int               @map("ticket_id")
+  ticket    MaintenanceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  action    String            // CREATED | STATUS_CHANGED | PRIORITY_SET | NOTE_UPDATED | CANCELLED
+  from      String?
+  to        String?
+  actorName String?           @map("actor_name")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("ticket_logs")
 }
 
 // 13. Notification - Thông báo
