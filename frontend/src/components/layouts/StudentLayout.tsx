@@ -227,7 +227,7 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
                 Invoice: (id) => `/student/invoices/${id}`,
                 Application: (id) => `/student/applications/${id}`,
                 Contract: (id) => `/student/contracts/${id}`,
-                RoomTransfer: () => `/student/room`,
+                RoomTransfer: () => `/student/room-transfer`,
               }}
             />
 

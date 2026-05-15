@@ -296,11 +296,6 @@ export class RoomTransfersService {
     }
 
     if (dto.action === 'APPROVED') {
-      // Kiểm tra lại sức chứa tại thời điểm duyệt
-      if (request.toRoom.contracts.length >= request.toRoom.capacity) {
-        throw new BadRequestException('Phòng đích đã đầy, không thể duyệt yêu cầu này');
-      }
-
       // Lấy hợp đồng hiện tại để biết isRoomLeader + tính chênh lệch tiền
       const activeContract = await this.prisma.contract.findFirst({
         where: { studentId: request.studentId, status: 'ACTIVE' },
@@ -311,19 +306,26 @@ export class RoomTransfersService {
         throw new BadRequestException('Sinh viên không còn hợp đồng ACTIVE để thực hiện chuyển phòng');
       }
 
-      await this.prisma.$transaction([
-        // Cập nhật trạng thái yêu cầu
-        this.prisma.roomTransferRequest.update({
+      // Kiểm tra sức chứa + cập nhật bên trong transaction để tránh race condition
+      await this.prisma.$transaction(async (tx) => {
+        const occupancy = await tx.contract.count({
+          where: { roomId: request.toRoomId, status: 'ACTIVE' },
+        });
+        if (occupancy >= request.toRoom.capacity) {
+          throw new BadRequestException('Phòng đích đã đầy, không thể duyệt yêu cầu này');
+        }
+
+        await tx.roomTransferRequest.update({
           where: { id },
           data: { status: 'APPROVED', reviewedById: reviewerId, reviewedAt: new Date() },
-        }),
-        // Cập nhật hợp đồng: phòng mới + bỏ trưởng phòng
-        // monthlyRent giữ nguyên theo giá lúc ký (invoice ROOM_FEE đã PAID theo giá đó)
-        this.prisma.contract.updateMany({
+        });
+
+        // monthlyRent giữ nguyên theo giá lúc ký
+        await tx.contract.updateMany({
           where: { studentId: request.studentId, status: 'ACTIVE' },
           data: { roomId: request.toRoomId, isRoomLeader: false },
-        }),
-      ]);
+        });
+      });
 
       // Nếu SV vừa chuyển là trưởng phòng cũ → tự động bầu trưởng mới cho phòng cũ
       if (activeContract.isRoomLeader) {
@@ -341,6 +343,17 @@ export class RoomTransfersService {
             data: { isRoomLeader: true },
           });
         }
+      }
+
+      // Nếu phòng mới chưa có trưởng phòng → assign SV vừa chuyển đến
+      const newRoomLeader = await this.prisma.contract.findFirst({
+        where: { roomId: request.toRoomId, status: 'ACTIVE', isRoomLeader: true },
+      });
+      if (!newRoomLeader) {
+        await this.prisma.contract.updateMany({
+          where: { studentId: request.studentId, status: 'ACTIVE', roomId: request.toRoomId },
+          data: { isRoomLeader: true },
+        });
       }
 
       // Tính chênh lệch tiền phòng cho phần còn lại của hợp đồng

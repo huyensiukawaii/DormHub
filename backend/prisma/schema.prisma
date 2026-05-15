@@ -633,5 +633,6 @@ model RoomTransferRequest {
 
   @@index([studentId])
   @@index([status])
+  @@index([toRoomId])
   @@map("room_transfer_requests")
 }

@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateRoomTransferDto {
   @ApiProperty({ description: 'ID phòng muốn chuyển đến' })
@@ -20,6 +20,7 @@ export class CreateRoomTransferDto {
   toRoomId: number;
 
   @ApiProperty({ description: 'Lý do chuyển phòng', maxLength: 500 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)

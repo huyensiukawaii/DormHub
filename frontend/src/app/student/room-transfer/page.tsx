@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import StudentLayout from '@/components/layouts/StudentLayout';
 import { ArrowRightLeft, CheckCircle, XCircle, Clock, X, Loader2, ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -58,10 +57,10 @@ function remainingMonths(endDateStr: string) {
 }
 
 export default function StudentRoomTransferPage() {
-  const router = useRouter();
   const [requests, setRequests] = useState<TransferRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentRoom, setCurrentRoom] = useState<{ code: string; building: { name: string } } | null>(null);
+  const [currentRoomId, setCurrentRoomId] = useState<number | null>(null);
   const [currentMonthlyRent, setCurrentMonthlyRent] = useState<number>(0);
   const [contractEndDate, setContractEndDate] = useState<string>('');
   const [hasActiveContract, setHasActiveContract] = useState(false);
@@ -93,6 +92,7 @@ export default function StudentRoomTransferPage() {
       if (activeContract) {
         setHasActiveContract(true);
         setCurrentRoom(activeContract.room ?? null);
+        setCurrentRoomId(activeContract.room?.id ?? activeContract.roomId ?? null);
         setCurrentMonthlyRent(Number(activeContract.monthlyRent ?? 0));
         setContractEndDate(activeContract.endDate ?? '');
       }
@@ -119,7 +119,8 @@ export default function StudentRoomTransferPage() {
       try {
         const genderParam = studentGender ? `&gender=${studentGender}` : '';
         const res = await api.get(`/rooms?hasAvailable=true&status=ACTIVE${genderParam}&limit=200`);
-        setRooms(Array.isArray(res.data) ? res.data : (res.data.data ?? []));
+        const all: Room[] = Array.isArray(res.data) ? res.data : (res.data.data ?? []);
+        setRooms(all.filter((r) => r.id !== currentRoomId));
       } catch {
         setFormError('Không thể tải danh sách phòng');
       } finally {

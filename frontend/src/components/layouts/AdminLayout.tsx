@@ -307,6 +307,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 Invoice: (id) => `/invoices/${id}`,
                 Application: (id) => `/applications/${id}`,
                 Contract: (id) => `/contracts/${id}`,
+                RoomTransfer: (id) => `/room-transfers/${id}`,
               }}
             />
 

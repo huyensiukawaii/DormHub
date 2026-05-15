@@ -57,28 +57,24 @@ export default function NotificationDropdown({
   const fetchUnreadCount = useCallback(async () => {
     try {
       const res = await api.get('/notifications/unread-count');
-      const count = res.data.count ?? 0;
-      setUnreadCount(count);
-      onCountChange?.(count);
+      setUnreadCount(res.data.count ?? 0);
     } catch {
       // ignore
     }
-  }, [onCountChange]);
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get('/notifications?page=1&limit=10');
       setNotifications(res.data.data ?? []);
-      const count = res.data.unreadCount ?? 0;
-      setUnreadCount(count);
-      onCountChange?.(count);
+      setUnreadCount(res.data.unreadCount ?? 0);
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, [onCountChange]);
+  }, []);
 
   // Initial unread count on mount
   useEffect(() => {
@@ -116,7 +112,6 @@ export default function NotificationDropdown({
       api.patch(`/notifications/${n.id}/read`).catch(() => {});
       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
       setUnreadCount((c) => Math.max(0, c - 1));
-      onCountChange?.(Math.max(0, unreadCount - 1));
     }
     if (n.referenceType && n.referenceId) {
       const linkFn = referenceLinks[n.referenceType];
@@ -131,11 +126,15 @@ export default function NotificationDropdown({
       await api.patch('/notifications/read-all');
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
-      onCountChange?.(0);
     } finally {
       setMarkingAll(false);
     }
   };
+
+  // Single source of truth: sync badge to parent whenever unreadCount changes
+  useEffect(() => {
+    onCountChange?.(unreadCount);
+  }, [unreadCount, onCountChange]);
 
   return (
     <div ref={dropdownRef} className="relative">

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layouts/AdminLayout';
+import { Loader2 as SpinnerFallback } from 'lucide-react';
 import {
   ArrowRightLeft,
   Clock,
@@ -47,7 +48,7 @@ const STATUS_CONFIG: Record<TransferStatus, { label: string; color: string; bg: 
   CANCELLED: { label: 'Đã hủy',     color: 'text-slate-500',   bg: 'bg-slate-100',   icon: X },
 };
 
-export default function AdminRoomTransfersPage() {
+function AdminRoomTransfersContent() {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -394,5 +395,19 @@ export default function AdminRoomTransfersPage() {
         </div>
       )}
     </AdminLayout>
+  );
+}
+
+export default function AdminRoomTransfersPage() {
+  return (
+    <Suspense fallback={
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <SpinnerFallback className="w-6 h-6 animate-spin text-emerald-500" />
+        </div>
+      </AdminLayout>
+    }>
+      <AdminRoomTransfersContent />
+    </Suspense>
   );
 }
