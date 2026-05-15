@@ -22,6 +22,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { getStoredUser, clearAuth, type User } from '@/lib/auth';
 import NotificationDropdown from '@/components/NotificationDropdown';
@@ -65,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Vận hành',
     items: [
       { label: 'Hợp đồng', href: '/contracts', icon: FileSignature },
+      { label: 'Chuyển phòng', href: '/room-transfers', icon: ArrowRightLeft },
       { label: 'Công tơ', href: '/meters', icon: Zap },
       { label: 'Hóa đơn', href: '/invoices', icon: Receipt },
       { label: 'Sự cố', href: '/tickets', icon: Wrench },
@@ -305,6 +307,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 Invoice: (id) => `/invoices/${id}`,
                 Application: (id) => `/applications/${id}`,
                 Contract: (id) => `/contracts/${id}`,
+                RoomTransfer: (id) => `/room-transfers/${id}`,
               }}
             />
 

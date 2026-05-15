@@ -46,6 +46,7 @@ const REFERENCE_LINKS: Record<string, (id: number) => string> = {
   Invoice: (id) => `/invoices/${id}`,
   Application: (id) => `/applications/${id}`,
   Contract: (id) => `/contracts/${id}`,
+  RoomTransfer: (id) => `/room-transfers/${id}`,
 };
 
 export default function AdminNotificationsPage() {
