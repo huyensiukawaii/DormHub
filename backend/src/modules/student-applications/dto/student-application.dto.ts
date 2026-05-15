@@ -273,8 +273,11 @@ export class StudentDashboardDto {
     id: number;
     amount: number;
     dueDate: Date;
+    status: string;
     daysUntilDue: number;
   } | null;
+  unpaidInvoicesCount: number;
+  pendingTransfer: { id: number; code: string; toRoomCode: string } | null;
   pendingTicketsCount: number;
   recentInvoices: {
     id: number;

@@ -14,6 +14,8 @@ import {
   Building2,
   AlertCircle,
   Loader2,
+  ArrowRightLeft,
+  ReceiptText,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -25,6 +27,8 @@ interface AdminDashboardData {
     pendingApplications: number;
     contractsNotCheckedIn: number;
     openTickets: number;
+    pendingRoomTransfers: number;
+    overdueInvoices: number;
   };
   buildingOccupancy: Array<{
     id: number;
@@ -145,66 +149,27 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-500">Tổng phòng</span>
-            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-slate-600" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: 'Tổng phòng', value: stats.totalRooms, icon: Building2, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', href: '/rooms' },
+          { label: 'Phòng còn chỗ', value: stats.availableRooms, icon: DoorOpen, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', href: '/rooms?status=ACTIVE' },
+          { label: 'SV đang ở', value: stats.studentsWithActiveContracts.toLocaleString(), icon: Users, iconBg: 'bg-blue-100', iconColor: 'text-blue-600', href: '/students' },
+          { label: 'Đơn chờ duyệt', value: stats.pendingApplications, icon: FileText, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', href: '/applications?status=PENDING', urgent: stats.pendingApplications > 0 },
+          { label: 'HĐ chưa check-in', value: stats.contractsNotCheckedIn, icon: FileSignature, iconBg: 'bg-purple-100', iconColor: 'text-purple-600', href: '/contracts?checkedIn=false' },
+          { label: 'Sự cố đang xử lý', value: stats.openTickets, icon: Wrench, iconBg: 'bg-red-100', iconColor: 'text-red-600', href: '/tickets?status=NEW', urgent: stats.openTickets > 0 },
+          { label: 'Chuyển phòng chờ duyệt', value: stats.pendingRoomTransfers, icon: ArrowRightLeft, iconBg: 'bg-orange-100', iconColor: 'text-orange-600', href: '/room-transfers?status=PENDING', urgent: stats.pendingRoomTransfers > 0 },
+          { label: 'Hóa đơn quá hạn', value: stats.overdueInvoices, icon: ReceiptText, iconBg: 'bg-rose-100', iconColor: 'text-rose-600', href: '/invoices?status=OVERDUE', urgent: stats.overdueInvoices > 0 },
+        ].map(({ label, value, icon: Icon, iconBg, iconColor, href, urgent }) => (
+          <Link key={label} href={href} className={`bg-white rounded-xl p-4 border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${urgent ? 'border-amber-200' : 'border-slate-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm text-slate-500">{label}</span>
+              <div className={`w-8 h-8 ${iconBg} rounded-lg flex items-center justify-center`}>
+                <Icon className={`w-4 h-4 ${iconColor}`} />
+              </div>
             </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.totalRooms}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-500">Phòng còn chỗ</span>
-            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-              <DoorOpen className="w-4 h-4 text-emerald-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.availableRooms}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-500">SV đang ở</span>
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="w-4 h-4 text-blue-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.studentsWithActiveContracts.toLocaleString()}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-500">Đơn chờ duyệt</span>
-            <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-              <FileText className="w-4 h-4 text-amber-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.pendingApplications}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-500">HĐ chưa check-in</span>
-            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              <FileSignature className="w-4 h-4 text-purple-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.contractsNotCheckedIn}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-500">Sự cố đang xử lý</span>
-            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-              <Wrench className="w-4 h-4 text-red-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.openTickets}</p>
-        </div>
+            <p className={`text-2xl font-bold ${urgent ? 'text-amber-600' : 'text-slate-800'}`}>{value}</p>
+          </Link>
+        ))}
       </div>
 
       {/* Charts row */}

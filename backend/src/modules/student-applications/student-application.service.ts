@@ -11,6 +11,7 @@ import { ContractsService } from '../contracts/contracts.service';
 import { MailerService } from '../mailer/mailer.service';
 import { ConfigService } from '@nestjs/config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { getAllowedBuildingIds } from '../../common/utils/building-access';
 import {
   CreateApplicationDto,
   UpdateApplicationStatusDto,
@@ -751,33 +752,45 @@ export class StudentApplicationsService {
 
     const activeContract = student.contracts[0];
 
-    const unpaidInvoice = activeContract
-      ? await this.prisma.invoice.findFirst({
-          where: { roomId: activeContract.roomId, status: 'PENDING' },
-          orderBy: { dueDate: 'asc' },
-        })
-      : null;
-
-    const pendingTicketsCount = await this.prisma.maintenanceTicket.count({
-      where: {
-        reportedById: studentId,
-        status: { in: ['NEW', 'IN_PROGRESS'] as any[] },
-      },
-    });
-
-    const recentInvoices = activeContract
-      ? await this.prisma.invoice.findMany({
-          where: { roomId: activeContract.roomId },
-          orderBy: { createdAt: 'desc' },
-          take: 3,
-        })
-      : [];
-
-    const recentTickets = await this.prisma.maintenanceTicket.findMany({
-      where: { reportedById: studentId },
-      orderBy: { createdAt: 'desc' },
-      take: 3,
-    });
+    const [
+      unpaidInvoice,
+      unpaidInvoicesCount,
+      pendingTicketsCount,
+      recentInvoices,
+      recentTickets,
+      pendingTransfer,
+    ] = await Promise.all([
+      activeContract
+        ? this.prisma.invoice.findFirst({
+            where: { roomId: activeContract.roomId, status: { in: ['PENDING', 'OVERDUE'] as any } },
+            orderBy: { dueDate: 'asc' },
+          })
+        : Promise.resolve(null),
+      activeContract
+        ? this.prisma.invoice.count({
+            where: { roomId: activeContract.roomId, status: { in: ['PENDING', 'OVERDUE'] as any } },
+          })
+        : Promise.resolve(0),
+      this.prisma.maintenanceTicket.count({
+        where: { reportedById: studentId, status: { in: ['NEW', 'IN_PROGRESS'] as any[] } },
+      }),
+      activeContract
+        ? this.prisma.invoice.findMany({
+            where: { roomId: activeContract.roomId },
+            orderBy: { createdAt: 'desc' },
+            take: 3,
+          })
+        : Promise.resolve([]),
+      this.prisma.maintenanceTicket.findMany({
+        where: { reportedById: studentId },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      }),
+      this.prisma.roomTransferRequest.findFirst({
+        where: { studentId, status: 'PENDING' },
+        select: { id: true, code: true, toRoom: { select: { code: true } } },
+      }),
+    ]);
 
     const now = new Date();
 
@@ -809,12 +822,17 @@ export class StudentApplicationsService {
             id: unpaidInvoice.id,
             amount: (unpaidInvoice as any).totalAmount,
             dueDate: unpaidInvoice.dueDate,
+            status: unpaidInvoice.status,
             daysUntilDue: Math.ceil(
               (unpaidInvoice.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
             ),
           }
         : null,
+      unpaidInvoicesCount,
       pendingTicketsCount,
+      pendingTransfer: pendingTransfer
+        ? { id: pendingTransfer.id, code: pendingTransfer.code, toRoomCode: (pendingTransfer as any).toRoom.code }
+        : null,
       recentInvoices: recentInvoices.map((inv: any) => ({
         id: inv.id,
         month: `Tháng ${inv.billingMonth}/${inv.billingYear}`,
@@ -1039,9 +1057,24 @@ export class StudentApplicationsService {
   // ========================================
   // GET ADMIN DASHBOARD
   // ========================================
-  async getAdminDashboard() {
+  async getAdminDashboard(user: any) {
+    const allowedBuildingIds = getAllowedBuildingIds(user);
     const now = new Date();
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    // Filter helpers — empty object ({}) means no restriction (ADMIN path)
+    const buildingIdFilter = allowedBuildingIds !== undefined ? { in: allowedBuildingIds } : undefined;
+    const viaRoom = buildingIdFilter ? { room: { buildingId: buildingIdFilter } } : {};
+    const viaFromRoom = buildingIdFilter ? { fromRoom: { buildingId: buildingIdFilter } } : {};
+    // Applications: PENDING may not have approvedRoom yet — filter via roomChoices too
+    const viaApp = buildingIdFilter
+      ? {
+          OR: [
+            { approvedRoom: { buildingId: buildingIdFilter } },
+            { roomChoices: { some: { room: { buildingId: buildingIdFilter } } } },
+          ],
+        }
+      : {};
 
     const [
       totalRooms,
@@ -1049,24 +1082,30 @@ export class StudentApplicationsService {
       pendingApplications,
       contractsNotCheckedIn,
       openTickets,
+      pendingRoomTransfers,
+      overdueInvoices,
       buildings,
       recentApps,
       recentTickets,
       paidInvoices,
     ] = await Promise.all([
-      this.prisma.room.count({ where: { status: 'ACTIVE' as any } }),
+      this.prisma.room.count({
+        where: { status: 'ACTIVE' as any, ...(buildingIdFilter ? { buildingId: buildingIdFilter } : {}) },
+      }),
       this.prisma.contract
         .findMany({
-          where: { status: 'ACTIVE' as any },
+          where: { status: 'ACTIVE' as any, ...viaRoom },
           distinct: ['studentId'],
           select: { studentId: true },
         })
         .then((rows) => rows.length),
-      this.prisma.registrationApplication.count({ where: { status: 'PENDING' } }),
-      this.prisma.contract.count({ where: { status: 'ACTIVE' as any, checkedInAt: null } }),
-      this.prisma.maintenanceTicket.count({ where: { status: { in: ['NEW', 'IN_PROGRESS'] as any } } }),
+      this.prisma.registrationApplication.count({ where: { status: 'PENDING', ...viaApp } }),
+      this.prisma.contract.count({ where: { status: 'ACTIVE' as any, checkedInAt: null, ...viaRoom } }),
+      this.prisma.maintenanceTicket.count({ where: { status: { in: ['NEW', 'IN_PROGRESS'] as any }, ...viaRoom } }),
+      this.prisma.roomTransferRequest.count({ where: { status: 'PENDING', ...viaFromRoom } }),
+      this.prisma.invoice.count({ where: { status: 'OVERDUE' as any, ...viaRoom } }),
       this.prisma.building.findMany({
-        where: { status: 'ACTIVE' as any },
+        where: { status: 'ACTIVE' as any, ...(buildingIdFilter ? { id: buildingIdFilter } : {}) },
         include: {
           rooms: {
             where: { status: 'ACTIVE' as any },
@@ -1080,6 +1119,7 @@ export class StudentApplicationsService {
       this.prisma.registrationApplication.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
+        where: viaApp,
         include: {
           student: { select: { fullName: true, studentCode: true } },
           approvedRoom: { select: { code: true } },
@@ -1088,10 +1128,11 @@ export class StudentApplicationsService {
       this.prisma.maintenanceTicket.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
+        where: viaRoom,
         include: { room: { select: { code: true } } },
       }),
       this.prisma.invoice.findMany({
-        where: { status: 'PAID' as any, paidAt: { gte: sixMonthsAgo } },
+        where: { status: 'PAID' as any, paidAt: { gte: sixMonthsAgo }, ...viaRoom },
         select: { paidAt: true, totalAmount: true },
       }),
     ]);
@@ -1139,6 +1180,8 @@ export class StudentApplicationsService {
         pendingApplications,
         contractsNotCheckedIn,
         openTickets,
+        pendingRoomTransfers,
+        overdueInvoices,
       },
       buildingOccupancy,
       recentApplications: recentApps.map((app) => ({
