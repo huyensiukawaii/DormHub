@@ -64,25 +64,29 @@ export class RoomTransfersService {
       throw new BadRequestException('Phòng đích đã đầy, không còn chỗ trống');
     }
 
-    // 5. Tạo mã yêu cầu
-    const count = await this.prisma.roomTransferRequest.count();
-    const pad = String(count + 1).padStart(4, '0');
+    // 5. Tạo yêu cầu với code tạm, sau đó cập nhật dựa trên ID để tránh race condition
+    const tempCode = `CHPG-TEMP-${Date.now()}`;
+    const created = await this.prisma.roomTransferRequest.create({
+      data: {
+        code: tempCode,
+        studentId,
+        fromRoomId: contract.roomId,
+        toRoomId: dto.toRoomId,
+        reason: dto.reason,
+      },
+    });
+
+    // 6. Cập nhật code chính thức dựa trên ID (unique, không phụ thuộc count)
+    const pad = String(created.id).padStart(4, '0');
     const today = new Date();
     const dateStr =
       String(today.getFullYear()) +
       String(today.getMonth() + 1).padStart(2, '0') +
       String(today.getDate()).padStart(2, '0');
     const code = `CHPG-${dateStr}-${pad}`;
-
-    // 6. Tạo yêu cầu
-    const request = await this.prisma.roomTransferRequest.create({
-      data: {
-        code,
-        studentId,
-        fromRoomId: contract.roomId,
-        toRoomId: dto.toRoomId,
-        reason: dto.reason,
-      },
+    const request = await this.prisma.roomTransferRequest.update({
+      where: { id: created.id },
+      data: { code },
     });
 
     // 7. Thông báo xác nhận cho chính SV, kèm so sánh giá
@@ -186,6 +190,9 @@ export class RoomTransfersService {
       where.toRoom = { buildingId: { in: allowedBuildingIds } };
     }
     if (buildingId) {
+      if (allowedBuildingIds && !allowedBuildingIds.includes(buildingId)) {
+        throw new ForbiddenException('Không có quyền lọc theo tòa này');
+      }
       where.toRoom = { ...(where.toRoom ?? {}), buildingId };
     }
     if (search) {
@@ -300,6 +307,10 @@ export class RoomTransfersService {
         select: { id: true, isRoomLeader: true, monthlyRent: true, endDate: true },
       });
 
+      if (!activeContract) {
+        throw new BadRequestException('Sinh viên không còn hợp đồng ACTIVE để thực hiện chuyển phòng');
+      }
+
       await this.prisma.$transaction([
         // Cập nhật trạng thái yêu cầu
         this.prisma.roomTransferRequest.update({
@@ -315,7 +326,7 @@ export class RoomTransfersService {
       ]);
 
       // Nếu SV vừa chuyển là trưởng phòng cũ → tự động bầu trưởng mới cho phòng cũ
-      if (activeContract?.isRoomLeader) {
+      if (activeContract.isRoomLeader) {
         const candidate = await this.prisma.contract.findFirst({
           where: {
             roomId: request.fromRoomId,
@@ -334,7 +345,7 @@ export class RoomTransfersService {
 
       // Tính chênh lệch tiền phòng cho phần còn lại của hợp đồng
       let paymentNote = '';
-      if (activeContract?.monthlyRent && activeContract.endDate) {
+      if (activeContract.monthlyRent && activeContract.endDate) {
         const now = new Date();
         const endDate = new Date(activeContract.endDate);
         const remainingMonths = Math.max(

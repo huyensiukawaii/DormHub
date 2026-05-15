@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -24,10 +26,15 @@ export class CreateRoomTransferDto {
   reason: string;
 }
 
+export enum ReviewAction {
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
 export class ReviewRoomTransferDto {
-  @ApiProperty({ enum: ['APPROVED', 'REJECTED'] })
-  @IsEnum(['APPROVED', 'REJECTED'])
-  action: 'APPROVED' | 'REJECTED';
+  @ApiProperty({ enum: ReviewAction })
+  @IsEnum(ReviewAction)
+  action: ReviewAction;
 
   @ApiPropertyOptional({ description: 'Lý do từ chối (bắt buộc khi từ chối)', maxLength: 500 })
   @IsOptional()
@@ -41,17 +48,20 @@ export class QueryRoomTransferDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number = 20;
 
   @ApiPropertyOptional({ description: 'Lọc theo trạng thái: PENDING | APPROVED | REJECTED | CANCELLED' })
   @IsOptional()
-  @IsString()
+  @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'])
   status?: string;
 
   @ApiPropertyOptional({ description: 'Tìm theo tên SV, MSSV hoặc mã yêu cầu' })

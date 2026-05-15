@@ -115,11 +115,8 @@ export default function NotificationDropdown({
     if (!n.isRead) {
       api.patch(`/notifications/${n.id}/read`).catch(() => {});
       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
-      setUnreadCount((c) => {
-        const nextCount = Math.max(0, c - 1);
-        onCountChange?.(nextCount);
-        return nextCount;
-      });
+      setUnreadCount((c) => Math.max(0, c - 1));
+      onCountChange?.(Math.max(0, unreadCount - 1));
     }
     if (n.referenceType && n.referenceId) {
       const linkFn = referenceLinks[n.referenceType];

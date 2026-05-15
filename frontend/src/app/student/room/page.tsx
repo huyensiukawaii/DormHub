@@ -14,6 +14,8 @@ import {
   Wind,
   Crown,
   AlertCircle,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -76,6 +78,8 @@ export default function StudentRoomPage() {
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [myStudentId, setMyStudentId] = useState<number | null>(null);
   const [hasPendingTransfer, setHasPendingTransfer] = useState(false);
+  const [recentApproval, setRecentApproval] = useState<{ toRoomCode: string; reviewedAt: string } | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
   const [loading, setLoading] = useState(true);
   const [noRoom, setNoRoom] = useState(false);
 
@@ -98,10 +102,17 @@ export default function StudentRoomPage() {
         ]);
 
         setRoom(roomRes.data);
-        const pending = (transfersRes.data.data ?? []).some(
-          (r: any) => r.status === 'PENDING',
+        const transfers: any[] = transfersRes.data.data ?? [];
+        setHasPendingTransfer(transfers.some((r) => r.status === 'PENDING'));
+
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const approved = transfers.find(
+          (r) => r.status === 'APPROVED' && r.reviewedAt && new Date(r.reviewedAt).getTime() > sevenDaysAgo,
         );
-        setHasPendingTransfer(pending);
+        if (approved) {
+          setRecentApproval({ toRoomCode: approved.toRoom.code, reviewedAt: approved.reviewedAt });
+          setShowGuide(true);
+        }
       } catch {
         setNoRoom(true);
       } finally {
@@ -168,6 +179,46 @@ export default function StudentRoomPage() {
             </Link>
           )}
         </div>
+
+        {/* Banner hướng dẫn nhận phòng mới sau khi chuyển */}
+        {showGuide && recentApproval && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 relative">
+            <button
+              onClick={() => setShowGuide(false)}
+              className="absolute top-3 right-3 p-1 text-emerald-400 hover:text-emerald-600 rounded"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <h3 className="font-semibold text-emerald-800 text-sm">
+                Chuyển phòng được duyệt — Hướng dẫn nhận phòng {recentApproval.toRoomCode}
+              </h3>
+            </div>
+
+            <ol className="space-y-2 text-sm text-emerald-800 pl-1">
+              {[
+                'Mang theo thẻ sinh viên (hoặc CCCD) đến phòng quản lý ký túc xá.',
+                'Ký biên bản bàn giao phòng mới và nhận chìa khóa.',
+                'Trả lại chìa khóa phòng cũ cho ban quản lý.',
+                'Nếu phòng mới có giá cao hơn, thanh toán phần chênh lệch tại quầy.',
+                'Hoàn tất di chuyển đồ đạc trong vòng 3 ngày kể từ ngày duyệt.',
+              ].map((step, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 text-xs font-bold flex items-center justify-center mt-0.5">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            <p className="mt-3 text-xs text-emerald-600 pl-1">
+              Nếu có thắc mắc, liên hệ ban quản lý ký túc xá hoặc gửi phiếu hỗ trợ qua mục <strong>Sự cố</strong>.
+            </p>
+          </div>
+        )}
 
         {/* Info cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

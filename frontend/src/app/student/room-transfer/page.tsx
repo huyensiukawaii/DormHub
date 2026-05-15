@@ -240,7 +240,7 @@ export default function StudentRoomTransferPage() {
                     {(() => {
                       const selected = rooms.find((r) => String(r.id) === selectedRoomId);
                       if (!selected) return null;
-                      const newRent = selected.pricePerMonth;
+                      const newRent = Number(selected.pricePerMonth);
                       const diff = newRent - currentMonthlyRent;
                       const months = remainingMonths(contractEndDate);
                       if (diff === 0) return (
