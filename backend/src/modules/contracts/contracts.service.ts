@@ -297,6 +297,7 @@ export class ContractsService implements OnModuleInit {
       buildingId,
       studentId,
       notCheckedIn,
+      expiringSoon,
       sortBy = 'createdAt',
       sortOrder = 'desc',
     } = query;
@@ -326,6 +327,13 @@ export class ContractsService implements OnModuleInit {
     }
 
     if (notCheckedIn) where.checkedInAt = null;
+
+    if (expiringSoon) {
+      const in30Days = new Date();
+      in30Days.setDate(in30Days.getDate() + 30);
+      where.status = 'ACTIVE';
+      where.endDate = { lte: in30Days };
+    }
 
     const orderBy: any = {};
     const validSortFields = ['code', 'startDate', 'endDate', 'createdAt', 'status'];
@@ -542,15 +550,27 @@ export class ContractsService implements OnModuleInit {
       await this.autoPromoteLeader(contract.roomId, id);
     }
 
+    this.notifications.notifyStudent(contract.studentId, {
+      title: 'Xác nhận trả phòng thành công',
+      content: `Hợp đồng ${updated.code} đã được trả phòng. Cảm ơn bạn đã sử dụng dịch vụ ký túc xá.`,
+      type: 'SYSTEM',
+      referenceType: 'Contract',
+      referenceId: id,
+    }).catch(() => {});
+
     return updated;
   }
 
   // ========================================
   // TERMINATE (Chấm dứt sớm)
   // ========================================
-  async terminate(id: number, dto: TerminateContractDto) {
-    const contract = await this.prisma.contract.findUnique({ where: { id } });
+  async terminate(id: number, dto: TerminateContractDto, allowedBuildingIds?: number[]) {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { room: { select: { buildingId: true } } },
+    });
     if (!contract) throw new NotFoundException('Không tìm thấy hợp đồng');
+    assertAllowed(allowedBuildingIds, (contract as any).room.buildingId);
     if (contract.status !== 'ACTIVE') {
       throw new BadRequestException('Chỉ có thể chấm dứt hợp đồng đang ACTIVE');
     }
@@ -755,30 +775,41 @@ export class ContractsService implements OnModuleInit {
     try {
       const now = new Date();
 
-      // Tìm các trưởng phòng sắp bị expire để xử lý auto-promote sau
-      const expiringLeaders = await this.prisma.contract.findMany({
-        where: { status: 'ACTIVE', endDate: { lt: now }, isRoomLeader: true },
-        select: { id: true, roomId: true },
+      // Tìm các hợp đồng sắp expire (bao gồm trưởng phòng và studentId để notify)
+      const expiringContracts = await this.prisma.contract.findMany({
+        where: { status: 'ACTIVE', endDate: { lt: now } },
+        select: { id: true, code: true, roomId: true, studentId: true, isRoomLeader: true },
       });
 
-      const result = await this.prisma.contract.updateMany({
+      if (expiringContracts.length === 0) return;
+
+      await this.prisma.contract.updateMany({
         where: { status: 'ACTIVE', endDate: { lt: now } },
         data: { status: 'EXPIRED' },
       });
 
-      if (result.count > 0) {
-        console.log(`[CRON] Auto-expired ${result.count} contracts`);
-      }
+      console.log(`[CRON] Auto-expired ${expiringContracts.length} contracts`);
 
-      // Auto-promote trưởng phòng mới cho các phòng vừa mất trưởng
-      for (const { id, roomId } of expiringLeaders) {
-        const candidate = await this.prisma.contract.findFirst({
-          where: { roomId, status: 'ACTIVE' },
-          orderBy: { startDate: 'asc' },
-        });
-        if (candidate) {
-          await this.prisma.contract.update({ where: { id: candidate.id }, data: { isRoomLeader: true } });
-          console.log(`[CRON] Auto-promoted contract ${candidate.id} as leader for room ${roomId}`);
+      for (const contract of expiringContracts) {
+        // Notify sinh viên
+        this.notifications.notifyStudent(contract.studentId, {
+          title: 'Hợp đồng ký túc xá đã hết hạn',
+          content: `Hợp đồng ${contract.code} đã hết hạn và được đóng tự động. Vui lòng liên hệ ban quản lý nếu cần hỗ trợ.`,
+          type: 'SYSTEM',
+          referenceType: 'Contract',
+          referenceId: contract.id,
+        }).catch(() => {});
+
+        // Auto-promote trưởng phòng mới nếu cần
+        if (contract.isRoomLeader) {
+          const candidate = await this.prisma.contract.findFirst({
+            where: { roomId: contract.roomId, status: 'ACTIVE' },
+            orderBy: { startDate: 'asc' },
+          });
+          if (candidate) {
+            await this.prisma.contract.update({ where: { id: candidate.id }, data: { isRoomLeader: true } });
+            console.log(`[CRON] Auto-promoted contract ${candidate.id} as leader for room ${contract.roomId}`);
+          }
         }
       }
     } catch (err: any) {

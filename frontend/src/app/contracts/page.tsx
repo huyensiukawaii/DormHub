@@ -60,6 +60,9 @@ function ContractsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studentIdParam = searchParams.get('studentId');
+  const notCheckedInParam = searchParams.get('notCheckedIn') === 'true';
+  const expiringSoonParam = searchParams.get('expiringSoon') === 'true';
+
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +70,8 @@ function ContractsPage() {
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterNotCheckedIn, setFilterNotCheckedIn] = useState(notCheckedInParam);
+  const [filterExpiringSoon, setFilterExpiringSoon] = useState(expiringSoonParam);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -102,7 +107,7 @@ function ContractsPage() {
 
   useEffect(() => {
     fetchContracts();
-  }, [page, filterStatus, studentIdParam]);
+  }, [page, filterStatus, filterNotCheckedIn, filterExpiringSoon, studentIdParam]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -130,6 +135,8 @@ function ContractsPage() {
       if (search) params.append('search', search);
       if (filterStatus) params.append('status', filterStatus);
       if (studentIdParam) params.append('studentId', studentIdParam);
+      if (filterNotCheckedIn) params.append('notCheckedIn', 'true');
+      if (filterExpiringSoon) params.append('expiringSoon', 'true');
 
       const res = await api.get(`/contracts?${params.toString()}`);
       setContracts(res.data.data);
@@ -257,30 +264,48 @@ function ContractsPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
+          <button
+            onClick={() => { setFilterStatus(''); setFilterNotCheckedIn(false); setFilterExpiringSoon(false); setPage(1); }}
+            className="bg-white rounded-xl border border-slate-200 p-4 text-center hover:border-slate-300 hover:shadow-sm transition-all"
+          >
             <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
             <p className="text-xs text-slate-500">Tổng</p>
-          </div>
-          <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 text-center">
+          </button>
+          <button
+            onClick={() => { setFilterStatus('ACTIVE'); setFilterNotCheckedIn(false); setFilterExpiringSoon(false); setPage(1); }}
+            className={`bg-emerald-50 rounded-xl border p-4 text-center hover:shadow-sm transition-all ${filterStatus === 'ACTIVE' && !filterNotCheckedIn && !filterExpiringSoon ? 'border-emerald-400 ring-2 ring-emerald-200' : 'border-emerald-200'}`}
+          >
             <p className="text-2xl font-bold text-emerald-600">{stats.active}</p>
             <p className="text-xs text-emerald-700">Đang hiệu lực</p>
-          </div>
-          <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 text-center">
+          </button>
+          <button
+            onClick={() => { setFilterStatus('EXPIRED'); setFilterNotCheckedIn(false); setFilterExpiringSoon(false); setPage(1); }}
+            className={`bg-amber-50 rounded-xl border p-4 text-center hover:shadow-sm transition-all ${filterStatus === 'EXPIRED' ? 'border-amber-400 ring-2 ring-amber-200' : 'border-amber-200'}`}
+          >
             <p className="text-2xl font-bold text-amber-600">{stats.expired}</p>
             <p className="text-xs text-amber-700">Hết hạn</p>
-          </div>
-          <div className="bg-red-50 rounded-xl border border-red-200 p-4 text-center">
+          </button>
+          <button
+            onClick={() => { setFilterStatus('TERMINATED'); setFilterNotCheckedIn(false); setFilterExpiringSoon(false); setPage(1); }}
+            className={`bg-red-50 rounded-xl border p-4 text-center hover:shadow-sm transition-all ${filterStatus === 'TERMINATED' ? 'border-red-400 ring-2 ring-red-200' : 'border-red-200'}`}
+          >
             <p className="text-2xl font-bold text-red-600">{stats.terminated}</p>
             <p className="text-xs text-red-700">Chấm dứt</p>
-          </div>
-          <div className="bg-blue-50 rounded-xl border border-blue-200 p-4 text-center">
+          </button>
+          <button
+            onClick={() => { setFilterStatus(''); setFilterNotCheckedIn(true); setFilterExpiringSoon(false); setPage(1); }}
+            className={`bg-blue-50 rounded-xl border p-4 text-center hover:shadow-sm transition-all ${filterNotCheckedIn ? 'border-blue-400 ring-2 ring-blue-200' : 'border-blue-200'}`}
+          >
             <p className="text-2xl font-bold text-blue-600">{stats.notCheckedIn}</p>
             <p className="text-xs text-blue-700">Chưa check-in</p>
-          </div>
-          <div className="bg-orange-50 rounded-xl border border-orange-200 p-4 text-center">
+          </button>
+          <button
+            onClick={() => { setFilterStatus(''); setFilterNotCheckedIn(false); setFilterExpiringSoon(true); setPage(1); }}
+            className={`bg-orange-50 rounded-xl border p-4 text-center hover:shadow-sm transition-all ${filterExpiringSoon ? 'border-orange-400 ring-2 ring-orange-200' : 'border-orange-200'}`}
+          >
             <p className="text-2xl font-bold text-orange-600">{stats.expiringCount}</p>
             <p className="text-xs text-orange-700">Sắp hết hạn</p>
-          </div>
+          </button>
         </div>
       )}
 
@@ -293,6 +318,26 @@ function ContractsPage() {
             <button onClick={() => router.push('/contracts')} className="ml-auto p-0.5 hover:bg-emerald-100 rounded">
               <X className="w-3.5 h-3.5" />
             </button>
+          </div>
+        )}
+        {(filterNotCheckedIn || filterExpiringSoon) && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {filterNotCheckedIn && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                Chưa check-in
+                <button onClick={() => { setFilterNotCheckedIn(false); setPage(1); }} className="hover:text-blue-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filterExpiringSoon && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                Sắp hết hạn (&le;30 ngày)
+                <button onClick={() => { setFilterExpiringSoon(false); setPage(1); }} className="hover:text-orange-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3">
@@ -308,7 +353,7 @@ function ContractsPage() {
           </div>
           <select
             value={filterStatus}
-            onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+            onChange={(e) => { setFilterStatus(e.target.value); setFilterNotCheckedIn(false); setFilterExpiringSoon(false); setPage(1); }}
             className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
           >
             <option value="">Tất cả trạng thái</option>
@@ -343,8 +388,9 @@ function ContractsPage() {
                   {contracts.map((contract) => {
                     const sc = STATUS_CONFIG[contract.status];
                     const Icon = sc.icon;
+                    const isOverdue = contract.status === 'ACTIVE' && contract.daysRemaining <= 0;
                     return (
-                      <tr key={contract.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={contract.id} className={`transition-colors ${isOverdue ? 'bg-red-50/50 hover:bg-red-50' : 'hover:bg-slate-50'}`}>
                         <td className="px-4 py-4">
                           <button
                             onClick={() => router.push(`/contracts/${contract.id}`)}
@@ -381,6 +427,11 @@ function ContractsPage() {
                           {contract.status === 'ACTIVE' && contract.daysRemaining > 0 && (
                             <p className={`text-xs font-medium mt-0.5 ${contract.daysRemaining <= 30 ? 'text-amber-600' : 'text-emerald-600'}`}>
                               Còn {contract.daysRemaining} ngày
+                            </p>
+                          )}
+                          {isOverdue && (
+                            <p className="text-xs font-semibold text-red-600 mt-0.5">
+                              Quá hạn {Math.abs(contract.daysRemaining)} ngày
                             </p>
                           )}
                         </td>
