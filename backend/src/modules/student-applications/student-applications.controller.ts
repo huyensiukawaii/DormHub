@@ -127,8 +127,8 @@ export class AdminDashboardController {
   @Get('dashboard')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Tổng quan hệ thống cho admin' })
-  async getDashboard() {
-    return this.service.getAdminDashboard();
+  async getDashboard(@Request() req: any) {
+    return this.service.getAdminDashboard(req.user);
   }
 }
 
