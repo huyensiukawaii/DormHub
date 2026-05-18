@@ -18,6 +18,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RoomTransfersModule } from './modules/room-transfers/room-transfers.module';
+import { AnnouncementsModule } from './modules/announcements/announcements.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { RoomTransfersModule } from './modules/room-transfers/room-transfers.mod
     TicketsModule,
     NotificationsModule,
     RoomTransfersModule,
+    AnnouncementsModule,
   ],
 })
 export class AppModule {}

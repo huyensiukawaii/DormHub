@@ -23,6 +23,7 @@ import {
   X,
   ShieldCheck,
   ArrowRightLeft,
+  Megaphone,
 } from 'lucide-react';
 import { getStoredUser, clearAuth, type User } from '@/lib/auth';
 import NotificationDropdown from '@/components/NotificationDropdown';
@@ -77,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Hệ thống',
     items: [
       { label: 'Nhân viên', href: '/staff', icon: Users, staffLabel: 'Tòa của tôi' },
+      { label: 'Bảng thông báo', href: '/announcements', icon: Megaphone },
       { label: 'Thông báo', href: '/notifications', icon: Bell },
       { label: 'Cài đặt', href: '/settings', icon: Settings, adminOnly: true },
     ],

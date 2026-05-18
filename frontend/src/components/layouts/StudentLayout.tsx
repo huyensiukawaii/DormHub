@@ -20,6 +20,7 @@ import {
   Building2,
   ClipboardCheck,
   ArrowRightLeft,
+  Megaphone,
 } from 'lucide-react';
 import { getStoredUser, clearAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -34,6 +35,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Trang chủ', href: '/student/dashboard', icon: Home },
+  { label: 'Bảng thông báo', href: '/student/announcements', icon: Megaphone },
   { label: 'Hồ sơ cá nhân', href: '/student/profile', icon: User },
   { label: 'Phòng của tôi', href: '/student/room', icon: Home },
   { label: 'Đăng ký KTX', href: '/student/register', icon: ClipboardList },
