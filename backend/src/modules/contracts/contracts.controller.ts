@@ -106,13 +106,14 @@ export class AdminContractsController {
   }
 
   @Patch(':id/terminate')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Chấm dứt hợp đồng sớm' })
   async terminate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: TerminateContractDto,
+    @Request() req: any,
   ) {
-    return this.service.terminate(id, dto);
+    return this.service.terminate(id, dto, getAllowedBuildingIds(req.user));
   }
 
   @Patch(':id/room-leader')

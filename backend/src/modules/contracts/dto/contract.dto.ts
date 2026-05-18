@@ -188,6 +188,12 @@ export class QueryContractDto {
   @IsBoolean()
   notCheckedIn?: boolean;
 
+  @ApiPropertyOptional({ description: 'Chỉ hợp đồng ACTIVE sắp hết hạn trong 30 ngày hoặc đã quá hạn' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  expiringSoon?: boolean;
+
   @ApiPropertyOptional({ default: 'createdAt' })
   @IsOptional()
   @IsString()
