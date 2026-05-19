@@ -7,6 +7,8 @@ import {
   IsBoolean,
   IsArray,
   IsIn,
+  IsUrl,
+  ArrayMaxSize,
   Min,
   Max,
 } from 'class-validator';
@@ -37,7 +39,8 @@ export class CreateAnnouncementDto {
   @ApiPropertyOptional({ type: [String], description: 'Cloudinary URLs' })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(4)
+  @IsUrl({}, { each: true })
   images?: string[];
 }
 
@@ -57,7 +60,8 @@ export class UpdateAnnouncementDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(4)
+  @IsUrl({}, { each: true })
   images?: string[];
 }
 

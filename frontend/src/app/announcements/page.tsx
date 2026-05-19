@@ -367,7 +367,7 @@ export default function AdminAnnouncementsPage() {
   }, []);
 
   useEffect(() => {
-    if (activeChannel !== undefined) fetchPosts();
+    if (activeChannel !== null) fetchPosts();
   }, [activeChannel, page]);
 
   const fetchChannels = async () => {

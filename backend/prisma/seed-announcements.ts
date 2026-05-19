@@ -99,9 +99,11 @@ async function main() {
 
   console.log(`\nInserting ${allPosts.length} posts...`);
 
-  // Xóa posts cũ nếu muốn reset (comment nếu không cần)
-  await prisma.announcementReaction.deleteMany({});
-  await prisma.announcementPost.deleteMany({});
+  if (process.env.RESET_ANNOUNCEMENTS === 'true') {
+    console.log('RESET_ANNOUNCEMENTS=true — xóa dữ liệu cũ...');
+    await prisma.announcementReaction.deleteMany({});
+    await prisma.announcementPost.deleteMany({});
+  }
 
   for (const p of allPosts) {
     await prisma.announcementPost.create({

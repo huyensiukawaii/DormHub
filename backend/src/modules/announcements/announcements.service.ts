@@ -45,6 +45,26 @@ export class AnnouncementsService {
     };
   }
 
+  private mapPostBatch(
+    post: any,
+    countsMap: Record<number, Record<string, number>>,
+    totalMap: Record<number, number>,
+    viewerMap: Record<number, string>,
+  ) {
+    const { author, building, ...rest } = post;
+    return {
+      ...rest,
+      images: (rest.images as string[] | null) ?? [],
+      channelLabel: building ? building.name : 'Toàn KTX',
+      author: { id: author.id, fullName: author.fullName, role: author.role },
+      reactions: {
+        counts: countsMap[post.id] ?? {},
+        myReaction: viewerMap[post.id] ?? null,
+        total: totalMap[post.id] ?? 0,
+      },
+    };
+  }
+
   // ========================================
   // FIND (dùng cho cả admin và student)
   // ========================================
@@ -70,7 +90,6 @@ export class AnnouncementsService {
     const include = {
       author: { select: { id: true, fullName: true, role: true } },
       building: { select: { id: true, name: true, code: true } },
-      reactions: { select: { userId: true, emoji: true } },
     };
 
     const [pinnedPosts, normalPosts, total] = await Promise.all([
@@ -90,9 +109,39 @@ export class AnnouncementsService {
       this.prisma.announcementPost.count({ where: { ...where, isPinned: false } }),
     ]);
 
+    const allPostIds = [...pinnedPosts.map((p) => p.id), ...normalPosts.map((p) => p.id)];
+
+    const [reactionGroups, viewerReactions] = await Promise.all([
+      allPostIds.length
+        ? this.prisma.announcementReaction.groupBy({
+            by: ['postId', 'emoji'],
+            where: { postId: { in: allPostIds } },
+            _count: { emoji: true },
+          })
+        : Promise.resolve([]),
+      viewerId && allPostIds.length
+        ? this.prisma.announcementReaction.findMany({
+            where: { postId: { in: allPostIds }, userId: viewerId },
+            select: { postId: true, emoji: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const countsMap: Record<number, Record<string, number>> = {};
+    const totalMap: Record<number, number> = {};
+    for (const r of reactionGroups) {
+      if (!countsMap[r.postId]) { countsMap[r.postId] = {}; totalMap[r.postId] = 0; }
+      countsMap[r.postId][r.emoji] = r._count.emoji;
+      totalMap[r.postId] += r._count.emoji;
+    }
+    const viewerMap: Record<number, string> = {};
+    for (const r of viewerReactions) {
+      viewerMap[r.postId] = r.emoji;
+    }
+
     return {
-      pinned: pinnedPosts.map((p) => this.mapPost(p, viewerId)),
-      data: normalPosts.map((p) => this.mapPost(p, viewerId)),
+      pinned: pinnedPosts.map((p) => this.mapPostBatch(p, countsMap, totalMap, viewerMap)),
+      data: normalPosts.map((p) => this.mapPostBatch(p, countsMap, totalMap, viewerMap)),
       total,
       totalPages: Math.ceil(total / limit),
       page,
@@ -253,9 +302,15 @@ export class AnnouncementsService {
   // ========================================
   // REACT (upsert — đổi emoji hoặc bỏ react)
   // ========================================
-  async react(postId: number, dto: ReactAnnouncementDto, userId: number) {
+  async react(postId: number, dto: ReactAnnouncementDto, userId: number, allowedBuildingIds?: number[]) {
     const post = await this.prisma.announcementPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException('Không tìm thấy bài đăng');
+
+    if (allowedBuildingIds !== undefined && post.buildingId !== null) {
+      if (!allowedBuildingIds.includes(post.buildingId)) {
+        throw new ForbiddenException('Bạn không có quyền react bài đăng này');
+      }
+    }
 
     const existing = await this.prisma.announcementReaction.findUnique({
       where: { postId_userId: { postId, userId } },

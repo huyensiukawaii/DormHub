@@ -20,6 +20,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagg
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { getAllowedBuildingIds } from '../../common/utils/building-access';
 import { AnnouncementsService } from './announcements.service';
 import { CloudinaryService } from '@/common/cloudinary/cloudinary.service';
 import {
@@ -58,16 +59,14 @@ export class AnnouncementsController {
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Danh sách kênh (theo quyền)' })
   async getChannels(@Request() req: any) {
-    const allowed = req.user.role === 'STAFF' ? (req.user.assignedBuildingIds as number[]) : undefined;
-    return this.service.getChannels(allowed);
+    return this.service.getChannels(getAllowedBuildingIds(req.user));
   }
 
   @Get()
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Danh sách bài đăng theo kênh' })
   async findAll(@Query() query: QueryAnnouncementDto, @Request() req: any) {
-    const allowed = req.user.role === 'STAFF' ? (req.user.assignedBuildingIds as number[]) : undefined;
-    return this.service.findAll(query, req.user.id, allowed);
+    return this.service.findAll(query, req.user.id, getAllowedBuildingIds(req.user));
   }
 
   @Post()
@@ -114,7 +113,7 @@ export class AnnouncementsController {
     @Body() dto: ReactAnnouncementDto,
     @Request() req: any,
   ) {
-    return this.service.react(id, dto, req.user.id);
+    return this.service.react(id, dto, req.user.id, getAllowedBuildingIds(req.user));
   }
 }
 
@@ -151,6 +150,8 @@ export class StudentAnnouncementsController {
     @Body() dto: ReactAnnouncementDto,
     @Request() req: any,
   ) {
-    return this.service.react(id, dto, req.user.id);
+    const channels = await this.service.getStudentChannels(req.user.studentId);
+    const allowedIds = channels.filter((c) => c.id !== null).map((c) => c.id as number);
+    return this.service.react(id, dto, req.user.id, allowedIds);
   }
 }
