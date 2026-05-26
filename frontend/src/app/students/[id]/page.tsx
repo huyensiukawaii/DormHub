@@ -483,7 +483,7 @@ export default function StudentDetailPage() {
                 <span className="text-xs font-medium text-slate-600 group-hover:text-emerald-700">Sự cố</span>
               </Link>
               <Link
-                href={`/applications/create?studentId=${student.id}`}
+                href={`/applications?studentId=${student.id}`}
                 className="flex flex-col items-center gap-2 p-4 bg-slate-50 hover:bg-emerald-50 rounded-lg transition-colors group"
               >
                 <Home className="w-6 h-6 text-slate-500 group-hover:text-emerald-600" />

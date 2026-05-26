@@ -518,6 +518,7 @@ export class StudentApplicationsService {
       periodId,
       status,
       applicationType,
+      studentId,
       search,
       sortBy = 'createdAt',
       sortOrder = 'desc',
@@ -529,6 +530,7 @@ export class StudentApplicationsService {
     if (periodId) where.periodId = periodId;
     if (status) where.status = status;
     if (applicationType) where.type = applicationType;
+    if (studentId) where.studentId = studentId;
     if (search) {
       where.student = {
         OR: [

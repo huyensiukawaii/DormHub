@@ -68,6 +68,28 @@ export class ResetPasswordDto {
   newPassword!: string;
 }
 
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ example: 'Nguyễn Văn A' })
+  @IsString()
+  fullName?: string;
+
+  @ApiPropertyOptional({ example: '0901234567' })
+  @IsString()
+  phone?: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(6)
+  currentPassword!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự' })
+  newPassword!: string;
+}
+
 export class AuthResponseDto {
   accessToken!: string;
   user!: {

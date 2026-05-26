@@ -267,12 +267,12 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
                       Hồ sơ cá nhân
                     </Link>
                     <Link
-                      href="/student/settings"
+                      href="/student/change-password"
                       className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <Settings className="w-4 h-4" />
-                      Cài đặt
+                      Đổi mật khẩu
                     </Link>
                     <div className="border-t border-slate-100 my-1" />
                     <button
