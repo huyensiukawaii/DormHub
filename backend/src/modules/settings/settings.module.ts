@@ -16,7 +16,12 @@ export class SettingsModule implements OnModuleInit {
         await this.settingsService.seedDefaults();
         return;
       } catch (err: any) {
-        if (attempt === 3 || err?.code !== 'P1017') {
+        const isConnectionError =
+          err?.code === 'P1017' ||
+          err?.code === 'P1001' ||
+          err?.message?.includes('timeout') ||
+          err?.message?.includes('Connection terminated');
+        if (attempt === 3 || !isConnectionError) {
           console.error('[SettingsModule] seedDefaults failed:', err?.message ?? err);
           return;
         }

@@ -1,9 +1,9 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
 import { PrismaService } from '@/common/prisma/prisma.service';
-import { LoginDto, RegisterDto, AuthResponseDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, AuthResponseDto, UpdateProfileDto, ChangePasswordDto } from './dto/auth.dto';
 import { UserRole } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
@@ -156,12 +156,13 @@ export class AuthService {
             },
           },
         },
+        assignedBuildings: {
+          include: { building: { select: { id: true, code: true, name: true } } },
+        },
       },
     });
 
-    if (!user) {
-      throw new UnauthorizedException();
-    }
+    if (!user) throw new UnauthorizedException();
 
     const activeContract = user.student?.contracts?.[0] ?? null;
 
@@ -172,6 +173,8 @@ export class AuthService {
       role: user.role,
       phone: user.phone,
       avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt,
+      assignedBuildings: user.assignedBuildings.map((b) => b.building),
       student: user.student,
       currentRoom: activeContract
         ? {
@@ -181,6 +184,33 @@ export class AuthService {
           }
         : null,
     };
+  }
+
+  async updateProfile(userId: number, dto: UpdateProfileDto) {
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.fullName && { fullName: dto.fullName }),
+        ...(dto.phone !== undefined && { phone: dto.phone }),
+      },
+      select: { id: true, email: true, fullName: true, phone: true, role: true },
+    });
+    return updated;
+  }
+
+  async changePassword(userId: number, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+
+    const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!valid) throw new ForbiddenException('Mật khẩu hiện tại không đúng');
+
+    const hash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: hash, mustChangePassword: false },
+    });
+    return { message: 'Đổi mật khẩu thành công' };
   }
 
   async logout(user: User) {

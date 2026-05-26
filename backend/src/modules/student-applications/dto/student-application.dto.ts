@@ -173,6 +173,12 @@ export class QueryApplicationDto {
   @IsEnum(ApplicationType)
   applicationType?: ApplicationType;
 
+  @ApiPropertyOptional({ description: 'Filter by student ID' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  studentId?: number;
+
   @ApiPropertyOptional({ description: 'Search by student code or name' })
   @IsOptional()
   @IsString()

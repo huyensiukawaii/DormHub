@@ -60,10 +60,11 @@ function ApplicationsPage() {
   const searchParams = useSearchParams();
 
   // Filters — đọc từ URL để share link được
-  const [periodId, setPeriodId]   = useState(searchParams.get('periodId') ?? '');
-  const [status,   setStatus]     = useState(searchParams.get('status')   ?? 'PENDING');
-  const [search,   setSearch]     = useState(searchParams.get('search')   ?? '');
-  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
+  const [periodId,   setPeriodId]   = useState(searchParams.get('periodId')   ?? '');
+  const [status,     setStatus]     = useState(searchParams.get('status')     ?? 'PENDING');
+  const [search,     setSearch]     = useState(searchParams.get('search')     ?? '');
+  const [searchInput, setSearchInput] = useState(searchParams.get('search')  ?? '');
+  const [studentId,  setStudentId]  = useState(searchParams.get('studentId') ?? '');
   const [page, setPage] = useState(1);
   const limit = 20;
 
@@ -84,9 +85,10 @@ function ApplicationsPage() {
       setLoading(true);
       setError('');
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-      if (periodId) params.set('periodId', periodId);
-      if (status)   params.set('status', status);
-      if (search)   params.set('search', search);
+      if (periodId)  params.set('periodId', periodId);
+      if (status)    params.set('status', status);
+      if (search)    params.set('search', search);
+      if (studentId) params.set('studentId', studentId);
       // PENDING sort theo điểm giảm dần; còn lại sort theo ngày nộp mới nhất
       if (status === 'PENDING' || status === '') {
         params.set('sortBy', 'priorityScore');
@@ -102,18 +104,19 @@ function ApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [periodId, status, search, page]);
+  }, [periodId, status, search, studentId, page]);
 
   useEffect(() => { fetchApps(); }, [fetchApps]);
 
   // Sync URL khi filter thay đổi
   useEffect(() => {
     const p = new URLSearchParams();
-    if (periodId) p.set('periodId', periodId);
-    if (status)   p.set('status', status);
-    if (search)   p.set('search', search);
+    if (periodId)  p.set('periodId', periodId);
+    if (status)    p.set('status', status);
+    if (search)    p.set('search', search);
+    if (studentId) p.set('studentId', studentId);
     router.replace(`/applications${p.toString() ? `?${p}` : ''}`, { scroll: false });
-  }, [periodId, status, search]);
+  }, [periodId, status, search, studentId]);
 
   const applySearch = () => { setSearch(searchInput); setPage(1); };
 
@@ -146,6 +149,16 @@ function ApplicationsPage() {
           </button>
         )}
       </div>
+
+      {/* Banner khi đang lọc theo sinh viên cụ thể */}
+      {studentId && (
+        <div className="flex items-center justify-between gap-3 mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
+          <span>Đang hiển thị đơn của sinh viên #{studentId}</span>
+          <button onClick={() => { setStudentId(''); setPage(1); }} className="font-medium hover:underline">
+            Xem tất cả
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4 space-y-3">

@@ -20,6 +20,7 @@ import {
   Building2,
   ClipboardCheck,
   ArrowRightLeft,
+  Megaphone,
 } from 'lucide-react';
 import { getStoredUser, clearAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -34,6 +35,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Trang chủ', href: '/student/dashboard', icon: Home },
+  { label: 'Bảng thông báo', href: '/student/announcements', icon: Megaphone },
   { label: 'Hồ sơ cá nhân', href: '/student/profile', icon: User },
   { label: 'Phòng của tôi', href: '/student/room', icon: Home },
   { label: 'Đăng ký KTX', href: '/student/register', icon: ClipboardList },
@@ -265,12 +267,12 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
                       Hồ sơ cá nhân
                     </Link>
                     <Link
-                      href="/student/settings"
+                      href="/student/change-password"
                       className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <Settings className="w-4 h-4" />
-                      Cài đặt
+                      Đổi mật khẩu
                     </Link>
                     <div className="border-t border-slate-100 my-1" />
                     <button

@@ -169,6 +169,8 @@ model User {
   assignedBuildings          UserBuilding[]
   assignedBuildingsBy        UserBuilding[]            @relation("AssignedByUser")
   reviewedTransfers          RoomTransferRequest[]
+  announcementPosts          AnnouncementPost[]        @relation("PostedBy")
+  announcementReactions      AnnouncementReaction[]
 
   @@map("users")
 }
@@ -184,8 +186,9 @@ model Building {
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  rooms         Room[]
-  assignedStaff UserBuilding[]
+  rooms              Room[]
+  assignedStaff      UserBuilding[]
+  announcementPosts  AnnouncementPost[]
 
   @@map("buildings")
 }
@@ -635,4 +638,43 @@ model RoomTransferRequest {
   @@index([status])
   @@index([toRoomId])
   @@map("room_transfer_requests")
+}
+
+// 18. AnnouncementPost - Bài đăng thông báo chung
+model AnnouncementPost {
+  id         Int       @id @default(autoincrement())
+  // null = kênh "Toàn KTX"; có giá trị = kênh tòa cụ thể
+  buildingId Int?      @map("building_id")
+  title      String
+  content    String    @db.Text
+  images     Json?     // string[] - Cloudinary URLs
+  isPinned   Boolean   @default(false) @map("is_pinned")
+  pinnedAt   DateTime? @map("pinned_at")
+  authorId   Int       @map("author_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  author    User                   @relation("PostedBy", fields: [authorId], references: [id])
+  building  Building?              @relation(fields: [buildingId], references: [id])
+  reactions AnnouncementReaction[]
+
+  @@index([buildingId])
+  @@index([isPinned])
+  @@index([createdAt])
+  @@map("announcement_posts")
+}
+
+// 19. AnnouncementReaction - Reaction của người dùng lên bài đăng
+model AnnouncementReaction {
+  postId Int    @map("post_id")
+  userId Int    @map("user_id")
+  // LIKE | LOVE | HAHA | WOW | SAD | ANGRY
+  emoji  String
+
+  post AnnouncementPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([postId])
+  @@map("announcement_reactions")
 }

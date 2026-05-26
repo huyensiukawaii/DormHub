@@ -23,6 +23,7 @@ import {
   X,
   ShieldCheck,
   ArrowRightLeft,
+  Megaphone,
 } from 'lucide-react';
 import { getStoredUser, clearAuth, type User } from '@/lib/auth';
 import NotificationDropdown from '@/components/NotificationDropdown';
@@ -77,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Hệ thống',
     items: [
       { label: 'Nhân viên', href: '/staff', icon: Users, staffLabel: 'Tòa của tôi' },
+      { label: 'Bảng thông báo', href: '/announcements', icon: Megaphone },
       { label: 'Thông báo', href: '/notifications', icon: Bell },
       { label: 'Cài đặt', href: '/settings', icon: Settings, adminOnly: true },
     ],
@@ -85,9 +87,10 @@ const NAV_GROUPS: NavGroup[] = [
 
 interface AdminLayoutProps {
   children: React.ReactNode;
+  hideSearch?: boolean;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default function AdminLayout({ children, hideSearch }: AdminLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
@@ -286,16 +289,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="hidden sm:flex items-center">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm sinh viên, phòng, hóa đơn..."
-                  className="w-80 pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                />
+            {!hideSearch && (
+              <div className="hidden sm:flex items-center">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm sinh viên, phòng, hóa đơn..."
+                    className="w-80 pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, Matches, IsEnum } from 'class-validator';
+import { IsEmail, IsString, IsOptional, MinLength, Matches, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, Gender } from '@prisma/client';
 import { IsStudentCodeInRange } from '../../../common/validators/student-code.validator';
@@ -65,6 +65,30 @@ export class ResetPasswordDto {
   @ApiProperty({ example: 'newPassword123' })
   @IsString()
   @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
+  newPassword!: string;
+}
+
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ example: 'Nguyễn Văn A' })
+  @IsOptional()
+  @IsString()
+  fullName?: string;
+
+  @ApiPropertyOptional({ example: '0901234567' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(6)
+  currentPassword!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự' })
   newPassword!: string;
 }
 

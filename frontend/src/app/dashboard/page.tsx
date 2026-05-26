@@ -236,17 +236,21 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-400 text-center py-8">Chưa có dữ liệu doanh thu</p>
           ) : (
             <>
-              <div className="flex items-end justify-between gap-3 h-40 mb-4">
+              <div className="flex items-end justify-between gap-3 h-32 mb-2">
                 {revenueByMonth.map((d, idx) => (
-                  <div key={d.month} className="flex-1 flex flex-col items-center">
+                  <div key={d.month} className="flex-1 h-full flex items-end">
                     <div
                       className={`w-full rounded-t-md transition-all ${
                         idx === revenueByMonth.length - 1 ? 'bg-slate-800' : 'bg-slate-200'
                       }`}
                       style={{ height: `${(d.amount / maxRevenue) * 100}%` }}
                     />
-                    <span className="text-[10px] text-slate-500 mt-2">{formatMonthLabel(d.month)}</span>
                   </div>
+                ))}
+              </div>
+              <div className="flex justify-between gap-3 mb-4">
+                {revenueByMonth.map((d) => (
+                  <span key={d.month} className="flex-1 text-[10px] text-slate-500 text-center">{formatMonthLabel(d.month)}</span>
                 ))}
               </div>
               <div className="flex items-center justify-between pt-4 border-t border-slate-100">
