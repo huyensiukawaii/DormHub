@@ -139,7 +139,7 @@ export class StudentAnnouncementsController {
     // Lấy buildingId tòa đang ở để validate quyền xem
     const channels = await this.service.getStudentChannels(req.user.studentId);
     const allowedIds = channels.filter((c) => c.id !== null).map((c) => c.id as number);
-    return this.service.findAll(query, req.user.id, allowedIds.length ? allowedIds : undefined);
+    return this.service.findAll(query, req.user.id, allowedIds);
   }
 
   @Post(':id/react')

@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, Matches, IsEnum } from 'class-validator';
+import { IsEmail, IsString, IsOptional, MinLength, Matches, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, Gender } from '@prisma/client';
 import { IsStudentCodeInRange } from '../../../common/validators/student-code.validator';
@@ -70,10 +70,12 @@ export class ResetPasswordDto {
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Nguyễn Văn A' })
+  @IsOptional()
   @IsString()
   fullName?: string;
 
   @ApiPropertyOptional({ example: '0901234567' })
+  @IsOptional()
   @IsString()
   phone?: string;
 }
