@@ -14,6 +14,8 @@ import {
   AlertCircle,
   X,
   Loader2,
+  LayoutGrid,
+  LayoutList,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getStoredUser, type User } from '@/lib/auth';
@@ -94,6 +96,7 @@ export default function BuildingDetailPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [userRole, setUserRole] = useState<User['role'] | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   useEffect(() => {
     fetchBuilding();
@@ -397,11 +400,82 @@ export default function BuildingDetailPage() {
             <option value="MAINTENANCE">Bảo trì</option>
             <option value="CLOSED">Ngừng HĐ</option>
           </select>
+
+          <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-1 ml-auto">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+              title="Dạng danh sách"
+            >
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+              title="Dạng lưới"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Grid view */}
+      {viewMode === 'grid' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 mb-5 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-400 inline-block" />Còn trống</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-400 inline-block" />Còn ít chỗ</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-400 inline-block" />Đầy</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-slate-300 inline-block" />Bảo trì / Đóng</span>
+          </div>
+
+          {filteredRooms.length === 0 ? (
+            <div className="text-center py-12">
+              <DoorOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500">Không tìm thấy phòng nào</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Array.from(new Set(filteredRooms.map((r) => r.floor))).sort((a, b) => a - b).map((floor) => (
+                <div key={floor}>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tầng {floor}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {filteredRooms.filter((r) => r.floor === floor).map((room) => {
+                      const isClosed = room.status !== 'ACTIVE';
+                      const isFull = room.occupiedCount >= room.capacity;
+                      const isAlmost = !isFull && room.occupiedCount >= room.capacity * 0.7;
+                      const color = isClosed
+                        ? 'bg-slate-200 text-slate-500 border-slate-300'
+                        : isFull
+                        ? 'bg-red-100 text-red-700 border-red-300'
+                        : isAlmost
+                        ? 'bg-amber-100 text-amber-700 border-amber-300'
+                        : 'bg-emerald-100 text-emerald-700 border-emerald-300';
+
+                      return (
+                        <button
+                          key={room.id}
+                          onClick={() => router.push(`/rooms/${room.id}`)}
+                          title={`${room.code} • ${room.occupiedCount}/${room.capacity} người • ${room.status === 'MAINTENANCE' ? 'Bảo trì' : room.status === 'CLOSED' ? 'Đóng' : isFull ? 'Đầy' : 'Còn trống'}`}
+                          className={`w-16 h-12 rounded-lg border text-xs font-semibold flex flex-col items-center justify-center gap-0.5 hover:opacity-80 transition-opacity ${color}`}
+                        >
+                          <span>{room.code}</span>
+                          <span className="font-normal opacity-70">{room.occupiedCount}/{room.capacity}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden ${viewMode === 'grid' ? 'hidden' : ''}`}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>

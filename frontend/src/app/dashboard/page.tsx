@@ -18,6 +18,10 @@ import {
   ReceiptText,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
 
 interface AdminDashboardData {
   stats: {
@@ -55,6 +59,8 @@ interface AdminDashboardData {
     createdAt: string;
   }>;
   revenueByMonth: Array<{ month: string; amount: number }>;
+  ticketsByCategory: Array<{ category: string; count: number }>;
+  invoiceStats: Array<{ status: string; count: number }>;
 }
 
 function timeAgo(dateStr: string): string {
@@ -131,11 +137,32 @@ export default function DashboardPage() {
     );
   }
 
-  const { stats, buildingOccupancy, recentApplications, recentTickets, revenueByMonth } = data;
-  const maxRevenue = Math.max(...revenueByMonth.map((d) => d.amount), 1);
+  const { stats, buildingOccupancy, recentApplications, recentTickets, revenueByMonth, ticketsByCategory, invoiceStats } = data;
   const currentMonthRevenue = revenueByMonth[revenueByMonth.length - 1]?.amount ?? 0;
   const avgRevenue = Math.round(revenueByMonth.reduce((s, d) => s + d.amount, 0) / (revenueByMonth.length || 1));
   const prevRevenue = revenueByMonth[revenueByMonth.length - 2]?.amount ?? 0;
+
+  const CATEGORY_LABEL: Record<string, string> = {
+    ELECTRICAL: 'Điện', PLUMBING: 'Nước', AIR_CONDITIONER: 'Điều hòa',
+    DOOR_LOCK: 'Khóa cửa', FURNITURE: 'Đồ dùng', OTHER: 'Khác',
+  };
+  const INVOICE_LABEL: Record<string, string> = {
+    PENDING: 'Chờ TT', PAID: 'Đã TT', OVERDUE: 'Quá hạn', CANCELLED: 'Huỷ',
+  };
+  const INVOICE_COLOR: Record<string, string> = {
+    PENDING: '#f59e0b', PAID: '#10b981', OVERDUE: '#ef4444', CANCELLED: '#94a3b8',
+  };
+  const CATEGORY_COLORS = ['#6366f1','#3b82f6','#06b6d4','#10b981','#f59e0b','#94a3b8'];
+
+  const ticketChartData = ticketsByCategory.map((t) => ({
+    name: CATEGORY_LABEL[t.category] ?? t.category,
+    value: t.count,
+  }));
+  const invoiceChartData = invoiceStats.map((i) => ({
+    name: INVOICE_LABEL[i.status] ?? i.status,
+    value: i.count,
+    color: INVOICE_COLOR[i.status] ?? '#94a3b8',
+  }));
   const revenueGrowth = prevRevenue > 0
     ? ((currentMonthRevenue - prevRevenue) / prevRevenue * 100).toFixed(1)
     : null;
@@ -236,24 +263,23 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-400 text-center py-8">Chưa có dữ liệu doanh thu</p>
           ) : (
             <>
-              <div className="flex items-end justify-between gap-3 h-32 mb-2">
-                {revenueByMonth.map((d, idx) => (
-                  <div key={d.month} className="flex-1 h-full flex items-end">
-                    <div
-                      className={`w-full rounded-t-md transition-all ${
-                        idx === revenueByMonth.length - 1 ? 'bg-slate-800' : 'bg-slate-200'
-                      }`}
-                      style={{ height: `${(d.amount / maxRevenue) * 100}%` }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between gap-3 mb-4">
-                {revenueByMonth.map((d) => (
-                  <span key={d.month} className="flex-1 text-[10px] text-slate-500 text-center">{formatMonthLabel(d.month)}</span>
-                ))}
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              <ResponsiveContainer width="100%" height={140}>
+                <BarChart data={revenueByMonth.map((d) => ({ ...d, label: formatMonthLabel(d.month) }))} barSize={28}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis hide />
+                  <Tooltip
+                    formatter={(v: number) => [formatCurrency(v), 'Doanh thu']}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                    cursor={{ fill: '#f8fafc' }}
+                  />
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    {revenueByMonth.map((_, idx) => (
+                      <Cell key={idx} fill={idx === revenueByMonth.length - 1 ? '#1e293b' : '#e2e8f0'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-2">
                 <div>
                   <p className="text-xs text-slate-500">Tháng này</p>
                   <p className="text-lg font-bold text-slate-800">{formatCurrency(currentMonthRevenue)}</p>
@@ -264,6 +290,50 @@ export default function DashboardPage() {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      </div>
+
+      {/* Analytics row: Ticket by category + Invoice stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Ticket by category */}
+        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-1">Sự cố theo danh mục</h3>
+          <p className="text-xs text-slate-500 mb-4">Tổng tất cả thời gian</p>
+          {ticketChartData.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">Chưa có dữ liệu</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie data={ticketChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={11}>
+                  {ticketChartData.map((_, idx) => (
+                    <Cell key={idx} fill={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => [v + ' sự cố']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Invoice stats */}
+        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-1">Trạng thái hoá đơn</h3>
+          <p className="text-xs text-slate-500 mb-4">Phân bố theo trạng thái</p>
+          {invoiceChartData.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">Chưa có dữ liệu</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie data={invoiceChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={70}>
+                  {invoiceChartData.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => [v + ' hoá đơn']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Legend iconType="circle" iconSize={8} formatter={(v) => <span style={{ fontSize: 12, color: '#475569' }}>{v}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>
