@@ -33,7 +33,8 @@ const TOOLS: Groq.Chat.Completions.ChatCompletionTool[] = [
         properties: {
           status: {
             type: 'string',
-            description: 'Lọc theo trạng thái: PENDING, PAID, OVERDUE. Bỏ trống để lấy tất cả.',
+            enum: ['PENDING', 'PAID', 'OVERDUE'],
+            description: 'Lọc theo trạng thái hoá đơn. Bỏ trống để lấy tất cả.',
           },
         },
         required: [],
@@ -50,7 +51,8 @@ const TOOLS: Groq.Chat.Completions.ChatCompletionTool[] = [
         properties: {
           status: {
             type: 'string',
-            description: 'Lọc theo trạng thái: NEW, IN_PROGRESS, COMPLETED, REJECTED',
+            enum: ['NEW', 'IN_PROGRESS', 'COMPLETED', 'REJECTED'],
+            description: 'Lọc theo trạng thái yêu cầu sửa chữa.',
           },
         },
         required: [],
@@ -87,9 +89,12 @@ export class ChatService {
   }
 
   async chat(messages: ChatMessageDto[], studentId: number): Promise<string> {
+    // Cap 20 tin nhắn gần nhất để tránh context overflow
+    const recent = messages.slice(-20);
+
     const history: Groq.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...messages.map((m) => ({
+      ...recent.map((m) => ({
         role: m.role === 'model' ? ('assistant' as const) : ('user' as const),
         content: m.content,
       })),
@@ -109,7 +114,8 @@ export class ChatService {
 
       const toolResults = await Promise.all(
         (assistantMsg.tool_calls ?? []).map(async (call) => {
-          const args = JSON.parse(call.function.arguments || '{}');
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(call.function.arguments || '{}'); } catch { /* dùng {} */ }
           const result = await this.executeTool(call.function.name, args, studentId);
           return {
             role: 'tool' as const,
@@ -181,6 +187,8 @@ export class ChatService {
   }
 
   private async getMyInvoices(studentId: number, status?: string) {
+    const validStatus = ['PENDING', 'PAID', 'OVERDUE', 'CANCELLED'];
+    const safeStatus = status && validStatus.includes(status) ? status : undefined;
     const allContracts = await this.prisma.contract.findMany({
       where: { studentId },
       select: { id: true, roomId: true },
@@ -197,7 +205,7 @@ export class ChatService {
         { contractId: { in: contractIds }, type: 'ROOM_FEE' },
       ],
     };
-    if (status) where.status = status;
+    if (safeStatus) where.status = safeStatus;
 
     const invoices = await this.prisma.invoice.findMany({
       where,
@@ -219,8 +227,10 @@ export class ChatService {
   }
 
   private async getMyTickets(studentId: number, status?: string) {
+    const validStatus = ['NEW', 'IN_PROGRESS', 'COMPLETED', 'REJECTED'];
+    const safeStatus = status && validStatus.includes(status) ? status : undefined;
     const where: any = { reportedById: studentId };
-    if (status) where.status = status;
+    if (safeStatus) where.status = safeStatus;
 
     const tickets = await this.prisma.maintenanceTicket.findMany({
       where,

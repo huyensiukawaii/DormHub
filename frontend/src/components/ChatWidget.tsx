@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, Loader2 } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, Loader2, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Message {
@@ -14,6 +14,13 @@ const WELCOME: Message = {
   content: 'Xin chào! Tôi là trợ lý DormHub. Bạn có thể hỏi tôi về hợp đồng, hoá đơn, yêu cầu sửa chữa, hay đăng ký phòng nhé.',
 };
 
+const SUGGESTIONS = [
+  'Hợp đồng của tôi còn hiệu lực không?',
+  'Tôi có hoá đơn chưa thanh toán không?',
+  'Yêu cầu sửa chữa của tôi đang thế nào?',
+  'Có đợt đăng ký phòng nào đang mở không?',
+];
+
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
@@ -21,6 +28,8 @@ export default function ChatWidget() {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasConversation = messages.length > 1;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,19 +39,18 @@ export default function ChatWidget() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
+  const send = async (text?: string) => {
+    const content = (text ?? input).trim();
+    if (!content || loading) return;
 
-    const userMsg: Message = { role: 'user', content: text };
+    const userMsg: Message = { role: 'user', content };
     const next = [...messages, userMsg];
     setMessages(next);
     setInput('');
     setLoading(true);
 
     try {
-      // Gửi toàn bộ history (bỏ tin nhắn welcome vì không phải từ user)
-      const history = next.filter((m) => !(m === WELCOME));
+      const history = next.filter((m) => m !== WELCOME);
       const { data } = await api.post('/chat', { messages: history });
       setMessages([...next, { role: 'model', content: data.reply }]);
     } catch {
@@ -59,14 +67,22 @@ export default function ChatWidget() {
     }
   };
 
+  const clearChat = () => {
+    setMessages([WELCOME]);
+    setInput('');
+    inputRef.current?.focus();
+  };
+
   return (
     <>
       {/* Chat popup */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-50 w-80 sm:w-96 flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
-          style={{ height: '480px' }}>
+        <div
+          className="fixed bottom-20 right-4 z-50 w-80 sm:w-96 flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+          style={{ height: '480px' }}
+        >
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-amber-500">
+          <div className="flex items-center gap-3 px-4 py-3 bg-amber-500 flex-shrink-0">
             <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
               <Bot className="w-4 h-4 text-white" />
             </div>
@@ -74,8 +90,18 @@ export default function ChatWidget() {
               <p className="text-sm font-semibold text-white">Trợ lý DormHub</p>
               <p className="text-xs text-amber-100">Hỏi về phòng, hoá đơn, sự cố...</p>
             </div>
+            {hasConversation && (
+              <button
+                onClick={clearChat}
+                title="Xoá lịch sử chat"
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4 text-white" />
+              </button>
+            )}
             <button
               onClick={() => setOpen(false)}
+              aria-label="Đóng chat hỗ trợ"
               className="p-1 hover:bg-white/20 rounded-lg transition-colors"
             >
               <X className="w-4 h-4 text-white" />
@@ -91,15 +117,32 @@ export default function ChatWidget() {
                     <Bot className="w-3.5 h-3.5 text-amber-600" />
                   </div>
                 )}
-                <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === 'user'
-                    ? 'bg-amber-500 text-white rounded-br-sm'
-                    : 'bg-slate-100 text-slate-800 rounded-bl-sm'
-                }`}>
+                <div
+                  className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                    msg.role === 'user'
+                      ? 'bg-amber-500 text-white rounded-br-sm'
+                      : 'bg-slate-100 text-slate-800 rounded-bl-sm'
+                  }`}
+                >
                   {msg.content}
                 </div>
               </div>
             ))}
+
+            {/* Suggested questions — chỉ hiện khi chưa có hội thoại */}
+            {!hasConversation && !loading && (
+              <div className="flex flex-col gap-2 pt-1">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => send(s)}
+                    className="text-left text-xs px-3 py-2 rounded-xl border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {loading && (
               <div className="flex justify-start">
@@ -115,7 +158,7 @@ export default function ChatWidget() {
           </div>
 
           {/* Input */}
-          <div className="px-3 py-3 border-t border-slate-100 flex gap-2 items-end">
+          <div className="px-3 py-3 border-t border-slate-100 flex gap-2 items-end flex-shrink-0">
             <textarea
               ref={inputRef}
               value={input}
@@ -126,8 +169,9 @@ export default function ChatWidget() {
               className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 max-h-24"
             />
             <button
-              onClick={send}
+              onClick={() => send()}
               disabled={!input.trim() || loading}
+              aria-label="Gửi tin nhắn"
               className="w-9 h-9 flex items-center justify-center bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 text-white rounded-xl transition-colors flex-shrink-0"
             >
               <Send className="w-4 h-4" />
@@ -140,7 +184,7 @@ export default function ChatWidget() {
       <button
         onClick={() => setOpen((v) => !v)}
         className="fixed bottom-4 right-4 z-50 w-14 h-14 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-        aria-label="Mở chat hỗ trợ"
+        aria-label={open ? 'Đóng chat hỗ trợ' : 'Mở chat hỗ trợ'}
       >
         {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
       </button>
