@@ -25,6 +25,7 @@ import {
 import { getStoredUser, clearAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import NotificationDropdown from '@/components/NotificationDropdown';
+import ChatWidget from '@/components/ChatWidget';
 
 interface NavItem {
   label: string;
@@ -292,6 +293,8 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
         {/* Page content */}
         <main className="p-4 lg:p-6">{children}</main>
       </div>
+
+      <ChatWidget />
     </div>
   );
 }
