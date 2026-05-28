@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hợp đồng sắp hết hạn</title>
+</head>
+<body style="margin:0;padding:0;background-color:#eff6ff;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#eff6ff;padding:40px 16px">
+    <tr>
+        <td align="center">
+            <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
+
+                <!-- Logo -->
+                <tr>
+                    <td align="center" style="padding-bottom:24px">
+                        <span style="font-size:22px;font-weight:700;color:#1e40af;letter-spacing:-0.3px">&#127968; {{appName}}</span>
+                    </td>
+                </tr>
+
+                <!-- Card -->
+                <tr>
+                    <td style="background-color:#ffffff;border-radius:16px;border:1px solid #bfdbfe">
+
+                        <!-- Accent bar -->
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td bgcolor="#3b82f6" style="height:6px;border-radius:16px 16px 0 0;font-size:0">&nbsp;</td>
+                            </tr>
+                        </table>
+
+                        <!-- Content -->
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td style="padding:36px 40px 32px">
+
+                                    <!-- Icon + heading -->
+                                    <table cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+                                        <tr>
+                                            <td style="width:52px;height:52px;background-color:#eff6ff;border:1px solid #bfdbfe;border-radius:50%;text-align:center;vertical-align:middle;font-size:24px">&#128197;</td>
+                                            <td style="padding-left:16px">
+                                                <div style="font-size:20px;font-weight:700;color:#111827">Hợp đồng KTX sắp hết hạn</div>
+                                                <div style="font-size:14px;color:#6b7280;margin-top:4px">Còn {{daysLeft}} ngày nữa</div>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    <!-- Greeting -->
+                                    <p style="font-size:15px;color:#374151;margin:0 0 20px">Xin chào <strong>{{studentName}}</strong>,</p>
+                                    <p style="font-size:15px;color:#374151;margin:0 0 24px">Hợp đồng ký túc xá của bạn sẽ hết hạn vào <strong>{{expiryDate}}</strong>. Nếu bạn muốn tiếp tục ở, hãy đăng ký gia hạn trong thời gian mở đợt đăng ký.</p>
+
+                                    <!-- Contract info box -->
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+                                        <tr>
+                                            <td style="background-color:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:20px">
+                                                <table width="100%" cellpadding="0" cellspacing="0">
+                                                    <tr>
+                                                        <td style="font-size:14px;color:#374151;padding:4px 0">&#127968; Phòng</td>
+                                                        <td style="font-size:14px;font-weight:700;color:#111827;text-align:right">{{roomCode}} — {{buildingName}}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="font-size:14px;color:#374151;padding:4px 0">&#128197; Ngày hết hạn</td>
+                                                        <td style="font-size:14px;font-weight:700;color:#1e40af;text-align:right">{{expiryDate}}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="font-size:14px;color:#374151;padding:4px 0">&#9200; Còn lại</td>
+                                                        <td style="font-size:14px;font-weight:700;color:#dc2626;text-align:right">{{daysLeft}} ngày</td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    <!-- CTA -->
+                                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px">
+                                        <tr>
+                                            <td align="center">
+                                                <a href="{{loginUrl}}" style="display:inline-block;background-color:#3b82f6;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:13px 32px;border-radius:10px">Xem hợp đồng</a>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    <p style="font-size:13px;color:#9ca3af;margin:24px 0 0;text-align:center">Theo dõi thông báo từ hệ thống để biết khi nào đợt đăng ký gia hạn mở.</p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- Footer -->
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td style="padding:20px 40px;border-top:1px solid #eff6ff;text-align:center">
+                                    <p style="font-size:12px;color:#9ca3af;margin:0">&#169; {{year}} {{appName}}. Email này được gửi tự động, vui lòng không trả lời.</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>
