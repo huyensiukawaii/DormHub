@@ -217,6 +217,78 @@ export class MailerService {
     return this.sendMail({ to: params.to, subject, text, html });
   }
 
+  async sendOverdueInvoiceReminderEmail(params: {
+    to: string;
+    studentName: string;
+    invoiceCount: number;
+    totalAmount: string;
+    invoices: { code: string; type: string; amount: string; dueDate: string }[];
+    loginUrl: string;
+  }): Promise<boolean> {
+    const appName = this.configService.get<string>('APP_NAME', 'DormHub');
+    const subject = `[${appName}] Nhắc nhở: Bạn có ${params.invoiceCount} hoá đơn quá hạn`;
+
+    const invoiceRowsHtml = params.invoices
+      .map(
+        (inv) =>
+          `<tr style="border-bottom:1px solid #f3f4f6">
+            <td style="font-size:13px;color:#374151;padding:8px 0">${this.escapeHtml(inv.code)} — ${this.escapeHtml(inv.type)}</td>
+            <td style="font-size:13px;font-weight:600;color:#9a3412;text-align:right;padding:8px 0">${this.escapeHtml(inv.amount)}</td>
+          </tr>`,
+      )
+      .join('');
+
+    const html = await this.renderHtmlTemplate({
+      templateFileName: 'invoice-overdue.html',
+      variables: {
+        appName,
+        studentName: params.studentName,
+        invoiceCount: params.invoiceCount,
+        totalAmount: params.totalAmount,
+        loginUrl: params.loginUrl,
+        year: new Date().getFullYear(),
+      },
+      rawVariables: {
+        invoiceRowsHtml: `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px">${invoiceRowsHtml}</table>`,
+      },
+    });
+
+    const text = `Xin chào ${params.studentName},\n\nBạn có ${params.invoiceCount} hoá đơn quá hạn, tổng cộng ${params.totalAmount}.\nVui lòng đăng nhập để thanh toán: ${params.loginUrl}`;
+
+    return this.sendMail({ to: params.to, subject, text, html });
+  }
+
+  async sendContractExpiryReminderEmail(params: {
+    to: string;
+    studentName: string;
+    roomCode: string;
+    buildingName: string;
+    expiryDate: string;
+    daysLeft: number;
+    loginUrl: string;
+  }): Promise<boolean> {
+    const appName = this.configService.get<string>('APP_NAME', 'DormHub');
+    const subject = `[${appName}] Hợp đồng KTX của bạn còn ${params.daysLeft} ngày nữa hết hạn`;
+
+    const html = await this.renderHtmlTemplate({
+      templateFileName: 'contract-expiry.html',
+      variables: {
+        appName,
+        studentName: params.studentName,
+        roomCode: params.roomCode,
+        buildingName: params.buildingName,
+        expiryDate: params.expiryDate,
+        daysLeft: params.daysLeft,
+        loginUrl: params.loginUrl,
+        year: new Date().getFullYear(),
+      },
+    });
+
+    const text = `Xin chào ${params.studentName},\n\nHợp đồng ký túc xá phòng ${params.roomCode} (${params.buildingName}) của bạn sẽ hết hạn vào ${params.expiryDate} (còn ${params.daysLeft} ngày).\nĐăng nhập tại: ${params.loginUrl}`;
+
+    return this.sendMail({ to: params.to, subject, text, html });
+  }
+
   async sendPasswordResetEmail(to: string, resetUrl: string, rawToken?: string): Promise<boolean> {
     const appName = this.configService.get<string>('APP_NAME', 'DormHub');
     const ttlRaw = this.configService.get<string>('RESET_PASSWORD_TTL_MINUTES');
