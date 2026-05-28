@@ -222,7 +222,7 @@ export class MailerService {
     studentName: string;
     invoiceCount: number;
     totalAmount: string;
-    invoices: { code: string; type: string; amount: string; dueDate: string }[];
+    invoices: { code: string; type: string; amount: string }[];
     loginUrl: string;
   }): Promise<boolean> {
     const appName = this.configService.get<string>('APP_NAME', 'DormHub');

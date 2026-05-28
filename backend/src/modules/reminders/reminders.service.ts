@@ -3,12 +3,22 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
+import { Prisma } from '@prisma/client';
+type Decimal = Prisma.Decimal;
 
 const formatDate = (d: Date) =>
   d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-const formatMoney = (amount: any) =>
+const formatMoney = (amount: Decimal | number | string) =>
   Number(amount).toLocaleString('vi-VN') + '₫';
+
+// Trả về Date tại 00:00:00.000 (local) + N ngày
+const startOfDayPlusDays = (base: Date, days: number): Date => {
+  const d = new Date(base);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + days);
+  return d;
+};
 
 @Injectable()
 export class RemindersService {
@@ -20,44 +30,56 @@ export class RemindersService {
     private config: ConfigService,
   ) {}
 
-  // Chạy 8:00 AM mỗi ngày
-  @Cron('0 8 * * *')
+  // Chạy 8:00 AM thứ Hai hàng tuần — tránh spam email mỗi ngày cho cùng hoá đơn
+  @Cron('0 8 * * 1')
   async sendOverdueInvoiceReminders() {
     this.logger.log('Bắt đầu gửi nhắc nhở hoá đơn quá hạn...');
     const loginUrl = this.config.get('FRONTEND_URL', 'http://localhost:3000') + '/student/invoices';
 
     const overdueInvoices = await this.prisma.invoice.findMany({
       where: { status: 'OVERDUE' },
-      include: {
+      select: {
+        id: true,
+        code: true,
+        type: true,
+        totalAmount: true,
+        dueDate: true,
         contract: {
-          include: { student: { include: { user: true } } },
+          select: {
+            student: {
+              select: { id: true, fullName: true, email: true, user: { select: { email: true } } },
+            },
+          },
         },
         room: {
-          include: {
+          select: {
             contracts: {
               where: { status: 'ACTIVE', isRoomLeader: true },
-              include: { student: { include: { user: true } } },
+              orderBy: { id: 'desc' },
               take: 1,
+              select: {
+                student: {
+                  select: { id: true, fullName: true, email: true, user: { select: { email: true } } },
+                },
+              },
             },
           },
         },
       },
     });
 
-    // Gom nhóm hoá đơn theo sinh viên
+    // Gom nhóm theo sinh viên
     const studentMap = new Map<number, {
       email: string;
       name: string;
-      invoices: typeof overdueInvoices;
+      invoices: { code: string; type: string; totalAmount: Decimal | number; dueDate: Date | null }[];
     }>();
 
     for (const inv of overdueInvoices) {
-      let student: any = null;
-      if (inv.type === 'ROOM_FEE' && inv.contract?.student) {
-        student = inv.contract.student;
-      } else if (inv.type === 'UTILITY' && inv.room?.contracts[0]?.student) {
-        student = inv.room.contracts[0].student;
-      }
+      const student =
+        inv.type === 'ROOM_FEE'
+          ? inv.contract?.student
+          : inv.room?.contracts[0]?.student;
 
       if (!student) continue;
 
@@ -67,7 +89,12 @@ export class RemindersService {
       if (!studentMap.has(student.id)) {
         studentMap.set(student.id, { email, name: student.fullName, invoices: [] });
       }
-      studentMap.get(student.id)!.invoices.push(inv);
+      studentMap.get(student.id)!.invoices.push({
+        code: inv.code,
+        type: inv.type,
+        totalAmount: inv.totalAmount,
+        dueDate: inv.dueDate,
+      });
     }
 
     let sent = 0;
@@ -83,7 +110,6 @@ export class RemindersService {
             code: inv.code,
             type: inv.type === 'ROOM_FEE' ? 'Tiền phòng' : 'Điện nước',
             amount: formatMoney(inv.totalAmount),
-            dueDate: inv.dueDate ? formatDate(inv.dueDate) : 'N/A',
           })),
           loginUrl,
         });
@@ -93,29 +119,33 @@ export class RemindersService {
       }
     }
 
-    this.logger.log(`Gửi nhắc nhở hoá đơn quá hạn: ${sent}/${studentMap.size} email thành công`);
+    this.logger.log(`Nhắc hoá đơn quá hạn: ${sent}/${studentMap.size} email thành công`);
   }
 
-  // Chạy 8:30 AM mỗi ngày
+  // Chạy 8:30 AM mỗi ngày — normalize về 00:00 để tránh lệch giờ với @db.Date
   @Cron('30 8 * * *')
   async sendContractExpiryReminders() {
     this.logger.log('Bắt đầu gửi nhắc nhở hợp đồng sắp hết hạn...');
     const loginUrl = this.config.get('FRONTEND_URL', 'http://localhost:3000') + '/student/contracts';
 
+    // target = đúng 30 ngày kể từ 00:00 hôm nay
     const today = new Date();
-    const in30Days = new Date(today);
-    in30Days.setDate(today.getDate() + 30);
-    const in29Days = new Date(today);
-    in29Days.setDate(today.getDate() + 29);
+    const targetDay = startOfDayPlusDays(today, 30);
+    const nextDay = startOfDayPlusDays(today, 31);
 
     const contracts = await this.prisma.contract.findMany({
       where: {
         status: 'ACTIVE',
-        endDate: { gte: in29Days, lte: in30Days },
+        endDate: { gte: targetDay, lt: nextDay },
       },
-      include: {
-        student: { include: { user: true } },
-        room: { include: { building: { select: { name: true } } } },
+      select: {
+        endDate: true,
+        student: {
+          select: { fullName: true, email: true, user: { select: { email: true } } },
+        },
+        room: {
+          select: { code: true, building: { select: { name: true } } },
+        },
       },
     });
 
@@ -144,6 +174,6 @@ export class RemindersService {
       }
     }
 
-    this.logger.log(`Gửi nhắc nhở hợp đồng sắp hết hạn: ${sent}/${contracts.length} email thành công`);
+    this.logger.log(`Nhắc hợp đồng sắp hết hạn: ${sent}/${contracts.length} email thành công`);
   }
 }
