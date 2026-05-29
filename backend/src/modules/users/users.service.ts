@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '@/common/prisma/prisma.service';
-import { AssignBuildingsDto, QueryUsersDto } from './dto/user.dto';
+import { AssignBuildingsDto, QueryUsersDto, CreateStaffDto, UpdateStaffDto } from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
@@ -112,5 +113,55 @@ export class UsersService {
       select: { buildingId: true },
     });
     return rows.map((r) => r.buildingId);
+  }
+
+  async createStaff(dto: CreateStaffDto) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
+    if (existing) throw new ConflictException('Email đã tồn tại');
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email.toLowerCase(),
+        passwordHash,
+        fullName: dto.fullName,
+        phone: dto.phone,
+        role: 'STAFF',
+      },
+    });
+
+    return this.findOne(user.id);
+  }
+
+  async updateStaff(id: number, dto: UpdateStaffDto) {
+    await this.findOne(id);
+
+    if (dto.email) {
+      const existing = await this.prisma.user.findFirst({
+        where: { email: dto.email.toLowerCase(), NOT: { id } },
+      });
+      if (existing) throw new ConflictException('Email đã tồn tại');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(dto.fullName && { fullName: dto.fullName }),
+        ...(dto.email && { email: dto.email.toLowerCase() }),
+        ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      },
+    });
+
+    return this.findOne(id);
+  }
+
+  async removeStaff(id: number) {
+    await this.findOne(id);
+    await this.prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    return { message: 'Đã vô hiệu hóa tài khoản nhân viên' };
   }
 }

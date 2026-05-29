@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { AssignBuildingsDto, QueryUsersDto } from './dto/user.dto';
+import { AssignBuildingsDto, QueryUsersDto, CreateStaffDto, UpdateStaffDto } from './dto/user.dto';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@/modules/auth/guards/roles.guard';
 import { Roles } from '@/modules/auth/decorators/roles.decorator';
@@ -66,5 +66,26 @@ export class UsersController {
     @Param('buildingId', ParseIntPipe) buildingId: number,
   ) {
     return this.usersService.removeBuilding(userId, buildingId);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Tạo tài khoản nhân viên' })
+  createStaff(@Body() dto: CreateStaffDto) {
+    return this.usersService.createStaff(dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Cập nhật thông tin nhân viên' })
+  updateStaff(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateStaffDto,
+  ) {
+    return this.usersService.updateStaff(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Vô hiệu hóa tài khoản nhân viên' })
+  removeStaff(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.removeStaff(id);
   }
 }
