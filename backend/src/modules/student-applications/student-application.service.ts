@@ -1090,6 +1090,8 @@ export class StudentApplicationsService {
       recentApps,
       recentTickets,
       paidInvoices,
+      ticketCategoryGroups,
+      invoiceStatusGroups,
     ] = await Promise.all([
       this.prisma.room.count({
         where: { status: 'ACTIVE' as any, ...(buildingIdFilter ? { buildingId: buildingIdFilter } : {}) },
@@ -1136,6 +1138,16 @@ export class StudentApplicationsService {
       this.prisma.invoice.findMany({
         where: { status: 'PAID' as any, paidAt: { gte: sixMonthsAgo }, ...viaRoom },
         select: { paidAt: true, totalAmount: true },
+      }),
+      this.prisma.maintenanceTicket.groupBy({
+        by: ['category'],
+        where: viaRoom,
+        _count: { id: true },
+      }),
+      this.prisma.invoice.groupBy({
+        by: ['status'],
+        where: viaRoom,
+        _count: { id: true },
       }),
     ]);
 
@@ -1203,6 +1215,14 @@ export class StudentApplicationsService {
         createdAt: t.createdAt,
       })),
       revenueByMonth,
+      ticketsByCategory: ticketCategoryGroups.map((g) => ({
+        category: g.category,
+        count: g._count.id,
+      })),
+      invoiceStats: invoiceStatusGroups.map((g) => ({
+        status: g.status,
+        count: g._count.id,
+      })),
     };
   }
 
