@@ -310,7 +310,7 @@ export default function DashboardPage() {
                     <Cell key={idx} fill={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => [v + ' sự cố']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip formatter={(v) => [Number(v) + ' sự cố']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -330,7 +330,7 @@ export default function DashboardPage() {
                     <Cell key={idx} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => [v + ' hoá đơn']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip formatter={(v) => [Number(v) + ' hoá đơn']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Legend iconType="circle" iconSize={8} formatter={(v) => <span style={{ fontSize: 12, color: '#475569' }}>{v}</span>} />
               </PieChart>
             </ResponsiveContainer>
