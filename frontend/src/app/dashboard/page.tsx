@@ -305,7 +305,7 @@ export default function DashboardPage() {
           ) : (
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
-                <Pie data={ticketChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={11}>
+                <Pie data={ticketChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={11}>
                   {ticketChartData.map((_, idx) => (
                     <Cell key={idx} fill={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]} />
                   ))}
