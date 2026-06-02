@@ -268,7 +268,7 @@ export default function DashboardPage() {
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                   <YAxis hide />
                   <Tooltip
-                    formatter={(v: number) => [formatCurrency(v), 'Doanh thu']}
+                    formatter={(v) => [formatCurrency(Number(v)), 'Doanh thu']}
                     contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
                     cursor={{ fill: '#f8fafc' }}
                   />
