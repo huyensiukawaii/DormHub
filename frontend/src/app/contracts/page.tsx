@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getStoredUser } from '@/lib/auth';
 
 type ContractStatus = 'ACTIVE' | 'TERMINATED' | 'EXPIRED';
 
@@ -78,6 +79,7 @@ function ContractsPage() {
   const limit = 10;
 
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const isAdmin = getStoredUser()?.role === 'ADMIN';
 
   // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -252,13 +254,15 @@ function ContractsPage() {
           <h1 className="text-2xl font-bold text-slate-800">Hợp đồng</h1>
           <p className="text-sm text-slate-500 mt-1">Quản lý hợp đồng ký túc xá</p>
         </div>
-        <button
-          onClick={() => { resetCreateModal(); setShowCreateModal(true); }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg"
-        >
-          <Plus className="w-4 h-4" />
-          Tạo hợp đồng
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => { resetCreateModal(); setShowCreateModal(true); }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg"
+          >
+            <Plus className="w-4 h-4" />
+            Tạo hợp đồng
+          </button>
+        )}
       </div>
 
       {/* Stats */}
