@@ -12,6 +12,7 @@ import { MailerService } from '../mailer/mailer.service';
 import { ConfigService } from '@nestjs/config';
 import { NotificationsService } from '../notifications/notifications.service';
 import { getAllowedBuildingIds } from '../../common/utils/building-access';
+import { SettingsService } from '../settings/settings.service';
 import {
   CreateApplicationDto,
   UpdateApplicationStatusDto,
@@ -75,6 +76,7 @@ export class StudentApplicationsService {
     private mailerService: MailerService,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
+    private settingsService: SettingsService,
   ) {}
 
   // ========================================
@@ -288,13 +290,14 @@ export class StudentApplicationsService {
       select: { type: true },
     });
 
+    const weights = await this.settingsService.getPriorityWeights();
     const DOC_POINTS: Record<string, number> = {
-      POOR_HOUSEHOLD: 15,
-      NEAR_POOR: 10,
-      ORPHAN: 15,
-      DISABLED: 15,
-      POLICY_FAMILY: 10,
-      GPA_TRANSCRIPT: 10,
+      POOR_HOUSEHOLD: weights.poorHousehold,
+      NEAR_POOR: weights.nearPoor,
+      ORPHAN: weights.orphan,
+      DISABLED: weights.disabled,
+      POLICY_FAMILY: weights.policyFamily,
+      GPA_TRANSCRIPT: weights.gpa3_6,
     };
 
     const approvedTypes = new Set(approvedDocs.map((d) => d.type as string));
@@ -913,39 +916,44 @@ export class StudentApplicationsService {
       }),
     ]);
 
+    const weights = await this.settingsService.getPriorityWeights();
     return {
       ...application,
-      priorityBreakdown: this.buildPriorityBreakdown(application, approvedDocs),
+      priorityBreakdown: this.buildPriorityBreakdown(application, approvedDocs, weights),
       approvedDocuments: approvedDocs,
       pendingDocuments: pendingDocs,
     };
   }
 
-  private buildPriorityBreakdown(app: any, approvedDocs: any[] = []) {
+  private buildPriorityBreakdown(
+    app: any,
+    approvedDocs: any[] = [],
+    weights: Awaited<ReturnType<SettingsService['getPriorityWeights']>>,
+  ) {
     // Dùng approved docs làm source of truth (tránh boolean flags trong DB bị sai)
     const docTypes = new Set(approvedDocs.map((d) => d.type as string));
 
     const items: { label: string; points: number; active: boolean }[] = [
-      { label: 'Sinh viên năm nhất', points: 20, active: app.isFirstYear },
-      { label: 'Hộ nghèo', points: 15, active: app.isPoorHousehold || docTypes.has('POOR_HOUSEHOLD') },
-      { label: 'Hộ cận nghèo', points: 10, active: app.isNearPoor || docTypes.has('NEAR_POOR') },
-      { label: 'Mồ côi', points: 15, active: app.isOrphan || docTypes.has('ORPHAN') },
-      { label: 'Khuyết tật', points: 15, active: app.isDisabled || docTypes.has('DISABLED') },
-      { label: 'Gia đình chính sách', points: 10, active: app.isPolicyFamily || docTypes.has('POLICY_FAMILY') },
-      { label: 'Đã từng ở KTX', points: 5, active: app.wasResident },
+      { label: 'Sinh viên năm nhất', points: weights.firstYear, active: app.isFirstYear },
+      { label: 'Hộ nghèo', points: weights.poorHousehold, active: app.isPoorHousehold || docTypes.has('POOR_HOUSEHOLD') },
+      { label: 'Hộ cận nghèo', points: weights.nearPoor, active: app.isNearPoor || docTypes.has('NEAR_POOR') },
+      { label: 'Mồ côi', points: weights.orphan, active: app.isOrphan || docTypes.has('ORPHAN') },
+      { label: 'Khuyết tật', points: weights.disabled, active: app.isDisabled || docTypes.has('DISABLED') },
+      { label: 'Gia đình chính sách', points: weights.policyFamily, active: app.isPolicyFamily || docTypes.has('POLICY_FAMILY') },
+      { label: 'Đã từng ở KTX', points: weights.wasResident, active: app.wasResident },
     ];
 
     if (docTypes.has('GPA_TRANSCRIPT')) {
       const gpa = app.gpaLastSemester ? parseFloat(app.gpaLastSemester.toString()) : 0;
-      if (gpa >= 3.6) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.6)`, points: 10, active: true });
-      else if (gpa >= 3.2) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.2)`, points: 7, active: true });
-      else if (gpa >= 2.5) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 2.5)`, points: 5, active: true });
-      else items.push({ label: 'Bảng điểm GPA', points: 10, active: true });
+      if (gpa >= 3.6) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.6)`, points: weights.gpa3_6, active: true });
+      else if (gpa >= 3.2) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.2)`, points: weights.gpa3_2, active: true });
+      else if (gpa >= 2.5) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 2.5)`, points: weights.gpa2_5, active: true });
+      else items.push({ label: 'Bảng điểm GPA', points: weights.gpa3_6, active: true });
     } else {
       const gpa = app.gpaLastSemester ? parseFloat(app.gpaLastSemester.toString()) : 0;
-      if (gpa >= 3.6) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.6)`, points: 10, active: true });
-      else if (gpa >= 3.2) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.2)`, points: 7, active: true });
-      else if (gpa >= 2.5) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 2.5)`, points: 5, active: true });
+      if (gpa >= 3.6) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.6)`, points: weights.gpa3_6, active: true });
+      else if (gpa >= 3.2) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 3.2)`, points: weights.gpa3_2, active: true });
+      else if (gpa >= 2.5) items.push({ label: `GPA ${gpa.toFixed(2)} (≥ 2.5)`, points: weights.gpa2_5, active: true });
     }
 
     return {

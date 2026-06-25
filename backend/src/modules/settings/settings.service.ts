@@ -25,17 +25,16 @@ export const DEFAULT_SETTINGS: Record<string, { value: string; description: stri
   water_over_quota_price: { value: '7000', description: 'Giá nước vượt định mức (đ/m³)' },
 
   // Điểm ưu tiên
-  priority_poor_household: { value: '40', description: 'Điểm: Hộ nghèo' },
-  priority_near_poor: { value: '30', description: 'Điểm: Hộ cận nghèo' },
-  priority_orphan: { value: '30', description: 'Điểm: Mồ côi' },
-  priority_disabled: { value: '35', description: 'Điểm: Khuyết tật' },
-  priority_policy_family: { value: '25', description: 'Điểm: Gia đình chính sách' },
   priority_first_year: { value: '20', description: 'Điểm: Sinh viên năm nhất' },
-  priority_gpa_3_2: { value: '15', description: 'Điểm: GPA ≥ 3.2' },
-  priority_was_resident: { value: '15', description: 'Điểm: Đã ở KTX kỳ trước' },
-  priority_distance_over_100: { value: '20', description: 'Điểm: Khoảng cách > 100km' },
-  priority_distance_over_300: { value: '30', description: 'Điểm: Khoảng cách > 300km' },
-  priority_distance_over_500: { value: '50', description: 'Điểm: Khoảng cách > 500km' },
+  priority_poor_household: { value: '15', description: 'Điểm: Hộ nghèo' },
+  priority_near_poor: { value: '10', description: 'Điểm: Hộ cận nghèo' },
+  priority_orphan: { value: '15', description: 'Điểm: Mồ côi' },
+  priority_disabled: { value: '15', description: 'Điểm: Khuyết tật' },
+  priority_policy_family: { value: '10', description: 'Điểm: Gia đình chính sách' },
+  priority_was_resident: { value: '5', description: 'Điểm: Đã ở KTX kỳ trước' },
+  priority_gpa_3_6: { value: '10', description: 'Điểm: GPA ≥ 3.6' },
+  priority_gpa_3_2: { value: '7', description: 'Điểm: GPA ≥ 3.2' },
+  priority_gpa_2_5: { value: '5', description: 'Điểm: GPA ≥ 2.5' },
 };
 
 @Injectable()
@@ -219,6 +218,26 @@ export class SettingsService {
         overUsed,
       },
     };
+  }
+
+  // ========================================
+  // HELPER: Lấy toàn bộ trọng số điểm ưu tiên
+  // ========================================
+  async getPriorityWeights() {
+    const [firstYear, poorHousehold, nearPoor, orphan, disabled, policyFamily, wasResident, gpa3_6, gpa3_2, gpa2_5] =
+      await Promise.all([
+        this.getNumber('priority_first_year', 20),
+        this.getNumber('priority_poor_household', 15),
+        this.getNumber('priority_near_poor', 10),
+        this.getNumber('priority_orphan', 15),
+        this.getNumber('priority_disabled', 15),
+        this.getNumber('priority_policy_family', 10),
+        this.getNumber('priority_was_resident', 5),
+        this.getNumber('priority_gpa_3_6', 10),
+        this.getNumber('priority_gpa_3_2', 7),
+        this.getNumber('priority_gpa_2_5', 5),
+      ]);
+    return { firstYear, poorHousehold, nearPoor, orphan, disabled, policyFamily, wasResident, gpa3_6, gpa3_2, gpa2_5 };
   }
 
   // ========================================

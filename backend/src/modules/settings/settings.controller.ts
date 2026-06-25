@@ -73,6 +73,13 @@ export class SettingsController {
     return { message: 'Đã seed settings mặc định' };
   }
 
+  @Get('priority-weights')
+  @Roles('ADMIN', 'STAFF', 'STUDENT')
+  @ApiOperation({ summary: 'Lấy trọng số điểm ưu tiên (tất cả role)' })
+  async getPriorityWeights() {
+    return this.service.getPriorityWeights();
+  }
+
   @Get('calculate/electricity')
   @Roles('ADMIN', 'STAFF')
   @ApiOperation({ summary: 'Tính tiền điện mẫu (preview)' })

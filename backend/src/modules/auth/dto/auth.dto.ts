@@ -46,6 +46,7 @@ export class RegisterDto {
   gender!: Gender;
 
   @ApiPropertyOptional({ example: '0901234567' })
+  @IsOptional()
   @IsString()
   phone?: string;
 }

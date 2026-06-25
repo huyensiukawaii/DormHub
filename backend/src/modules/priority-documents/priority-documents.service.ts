@@ -6,17 +6,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CloudinaryService } from '../../common/cloudinary/cloudinary.service';
+import { SettingsService } from '../settings/settings.service';
 import { PriorityDocumentType, DocumentStatus } from '@prisma/client';
-
-// Points map for approved document types
-const PRIORITY_POINTS: Record<PriorityDocumentType, number> = {
-  POOR_HOUSEHOLD: 15,
-  NEAR_POOR: 10,
-  ORPHAN: 15,
-  DISABLED: 15,
-  POLICY_FAMILY: 10,
-  GPA_TRANSCRIPT: 10,
-};
 
 export const DOCUMENT_TYPE_LABELS: Record<PriorityDocumentType, string> = {
   POOR_HOUSEHOLD: 'Hộ nghèo',
@@ -32,6 +23,7 @@ export class PriorityDocumentsService {
   constructor(
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
+    private settingsService: SettingsService,
   ) {}
 
   // ========================================
@@ -151,12 +143,23 @@ export class PriorityDocumentsService {
     });
 
     // Recalculate and update priorityScore for all PENDING applications of this student
-    const approvedDocs = await this.prisma.priorityDocument.findMany({
-      where: { studentId: doc.studentId, status: 'APPROVED' },
-      select: { type: true },
-    });
+    const [approvedDocs, weights] = await Promise.all([
+      this.prisma.priorityDocument.findMany({
+        where: { studentId: doc.studentId, status: 'APPROVED' },
+        select: { type: true },
+      }),
+      this.settingsService.getPriorityWeights(),
+    ]);
+    const pointsMap: Record<string, number> = {
+      POOR_HOUSEHOLD: weights.poorHousehold,
+      NEAR_POOR: weights.nearPoor,
+      ORPHAN: weights.orphan,
+      DISABLED: weights.disabled,
+      POLICY_FAMILY: weights.policyFamily,
+      GPA_TRANSCRIPT: weights.gpa3_6,
+    };
     const newScore = approvedDocs.reduce(
-      (sum, d) => sum + (PRIORITY_POINTS[d.type] ?? 0),
+      (sum, d) => sum + (pointsMap[d.type] ?? 0),
       0,
     );
     await this.prisma.registrationApplication.updateMany({
@@ -189,15 +192,25 @@ export class PriorityDocumentsService {
     approvedTypes: PriorityDocumentType[];
     breakdown: { type: PriorityDocumentType; label: string; points: number }[];
   }> {
-    const approved = await this.prisma.priorityDocument.findMany({
-      where: { studentId, status: 'APPROVED' },
-    });
+    const [approved, weights] = await Promise.all([
+      this.prisma.priorityDocument.findMany({ where: { studentId, status: 'APPROVED' } }),
+      this.settingsService.getPriorityWeights(),
+    ]);
+
+    const pointsMap: Record<PriorityDocumentType, number> = {
+      POOR_HOUSEHOLD: weights.poorHousehold,
+      NEAR_POOR: weights.nearPoor,
+      ORPHAN: weights.orphan,
+      DISABLED: weights.disabled,
+      POLICY_FAMILY: weights.policyFamily,
+      GPA_TRANSCRIPT: weights.gpa3_6,
+    };
 
     let score = 0;
     const breakdown: { type: PriorityDocumentType; label: string; points: number }[] = [];
 
     for (const doc of approved) {
-      const pts = PRIORITY_POINTS[doc.type];
+      const pts = pointsMap[doc.type];
       score += pts;
       breakdown.push({ type: doc.type, label: DOCUMENT_TYPE_LABELS[doc.type], points: pts });
     }

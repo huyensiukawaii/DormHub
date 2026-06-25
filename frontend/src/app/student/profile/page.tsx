@@ -63,14 +63,27 @@ interface PriorityScore {
   breakdown: { type: DocType; label: string; points: number }[];
 }
 
-const DOC_CRITERIA: { type: DocType; label: string; description: string; points: number }[] = [
-  { type: 'POOR_HOUSEHOLD', label: 'Hộ nghèo', description: 'Giấy xác nhận hộ nghèo từ địa phương', points: 15 },
-  { type: 'NEAR_POOR', label: 'Hộ cận nghèo', description: 'Giấy xác nhận hộ cận nghèo từ địa phương', points: 10 },
-  { type: 'ORPHAN', label: 'Mồ côi', description: 'Giấy khai sinh hoặc giấy tờ chứng minh mồ côi', points: 15 },
-  { type: 'DISABLED', label: 'Khuyết tật', description: 'Giấy xác nhận khuyết tật từ cơ quan có thẩm quyền', points: 15 },
-  { type: 'POLICY_FAMILY', label: 'Gia đình chính sách', description: 'Con thương binh, liệt sĩ, người có công', points: 10 },
-  { type: 'GPA_TRANSCRIPT', label: 'Bảng điểm GPA', description: 'Bảng điểm kỳ gần nhất (GPA ≥2.5)', points: 10 },
-];
+interface PriorityWeights {
+  firstYear: number; poorHousehold: number; nearPoor: number;
+  orphan: number; disabled: number; policyFamily: number;
+  wasResident: number; gpa3_6: number; gpa3_2: number; gpa2_5: number;
+}
+
+const DEFAULT_WEIGHTS: PriorityWeights = {
+  firstYear: 20, poorHousehold: 15, nearPoor: 10, orphan: 15,
+  disabled: 15, policyFamily: 10, wasResident: 5, gpa3_6: 10, gpa3_2: 7, gpa2_5: 5,
+};
+
+function buildDocCriteria(w: PriorityWeights) {
+  return [
+    { type: 'POOR_HOUSEHOLD' as DocType, label: 'Hộ nghèo', description: 'Giấy xác nhận hộ nghèo từ địa phương', points: w.poorHousehold },
+    { type: 'NEAR_POOR' as DocType, label: 'Hộ cận nghèo', description: 'Giấy xác nhận hộ cận nghèo từ địa phương', points: w.nearPoor },
+    { type: 'ORPHAN' as DocType, label: 'Mồ côi', description: 'Giấy khai sinh hoặc giấy tờ chứng minh mồ côi', points: w.orphan },
+    { type: 'DISABLED' as DocType, label: 'Khuyết tật', description: 'Giấy xác nhận khuyết tật từ cơ quan có thẩm quyền', points: w.disabled },
+    { type: 'POLICY_FAMILY' as DocType, label: 'Gia đình chính sách', description: 'Con thương binh, liệt sĩ, người có công', points: w.policyFamily },
+    { type: 'GPA_TRANSCRIPT' as DocType, label: 'Bảng điểm GPA', description: `Bảng điểm kỳ gần nhất (GPA ≥3.6: ${w.gpa3_6}đ · ≥3.2: ${w.gpa3_2}đ · ≥2.5: ${w.gpa2_5}đ)`, points: w.gpa3_6 },
+  ];
+}
 
 const STATUS_CONFIG: Record<DocStatus, { label: string; color: string; icon: React.ReactNode }> = {
   PENDING: { label: 'Chờ duyệt', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: <Clock className="w-3.5 h-3.5" /> },
@@ -115,6 +128,7 @@ export default function StudentProfile() {
 
   const [documents, setDocuments] = useState<PriorityDocument[]>([]);
   const [priorityScore, setPriorityScore] = useState<PriorityScore | null>(null);
+  const [priorityWeights, setPriorityWeights] = useState<PriorityWeights>(DEFAULT_WEIGHTS);
   const [uploading, setUploading] = useState<DocType | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -158,12 +172,14 @@ export default function StudentProfile() {
 
   const fetchPriorityData = async () => {
     try {
-      const [docsRes, scoreRes] = await Promise.all([
+      const [docsRes, scoreRes, weightsRes] = await Promise.all([
         api.get('/student/priority-documents'),
         api.get('/student/priority-documents/score'),
+        api.get('/settings/priority-weights'),
       ]);
       setDocuments(docsRes.data);
       setPriorityScore(scoreRes.data);
+      setPriorityWeights(weightsRes.data);
     } catch (err) {
       console.error(err);
     }
@@ -322,7 +338,7 @@ export default function StudentProfile() {
           </div>
 
           <div className="space-y-4">
-            {DOC_CRITERIA.map((criterion) => {
+            {buildDocCriteria(priorityWeights).map((criterion) => {
               const doc = getDocForType(criterion.type);
               const statusCfg = doc ? STATUS_CONFIG[doc.status] : null;
               const isUploading = uploading === criterion.type;
