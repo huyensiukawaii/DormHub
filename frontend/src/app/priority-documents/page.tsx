@@ -57,14 +57,22 @@ async function openFile(docId: number) {
   }
 }
 
-const TYPE_POINTS: Record<DocType, number> = {
-  POOR_HOUSEHOLD: 15,
-  NEAR_POOR: 10,
-  ORPHAN: 15,
-  DISABLED: 15,
-  POLICY_FAMILY: 10,
-  GPA_TRANSCRIPT: 10,
+interface PriorityWeights {
+  poorHousehold: number; nearPoor: number; orphan: number;
+  disabled: number; policyFamily: number; gpa3_6: number;
+}
+
+const DEFAULT_TYPE_POINTS: Record<DocType, number> = {
+  POOR_HOUSEHOLD: 15, NEAR_POOR: 10, ORPHAN: 15,
+  DISABLED: 15, POLICY_FAMILY: 10, GPA_TRANSCRIPT: 10,
 };
+
+function weightsToPoints(w: PriorityWeights): Record<DocType, number> {
+  return {
+    POOR_HOUSEHOLD: w.poorHousehold, NEAR_POOR: w.nearPoor, ORPHAN: w.orphan,
+    DISABLED: w.disabled, POLICY_FAMILY: w.policyFamily, GPA_TRANSCRIPT: w.gpa3_6,
+  };
+}
 
 export default function PriorityDocumentsPage() {
   const [documents, setDocuments] = useState<PriorityDocument[]>([]);
@@ -74,10 +82,17 @@ export default function PriorityDocumentsPage() {
   const [rejectModal, setRejectModal] = useState<{ docId: number } | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [search, setSearch] = useState('');
+  const [typePoints, setTypePoints] = useState<Record<DocType, number>>(DEFAULT_TYPE_POINTS);
 
   useEffect(() => {
     fetchDocuments();
   }, [statusFilter]);
+
+  useEffect(() => {
+    api.get('/settings/priority-weights').then((res) => {
+      setTypePoints(weightsToPoints(res.data));
+    }).catch(() => {});
+  }, []);
 
   const fetchDocuments = async () => {
     setLoading(true);
@@ -212,7 +227,7 @@ export default function PriorityDocumentsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-slate-800">{TYPE_LABELS[doc.type]}</span>
-                      <span className="ml-2 text-xs text-amber-600 font-medium">+{TYPE_POINTS[doc.type]}đ</span>
+                      <span className="ml-2 text-xs text-amber-600 font-medium">+{typePoints[doc.type]}đ</span>
                     </td>
                     <td className="px-4 py-3">
                       <button

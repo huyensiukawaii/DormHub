@@ -6,10 +6,12 @@ import {
   StudentPriorityDocsController,
   AdminPriorityDocsController,
 } from './priority-documents.controller';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
     MulterModule.register({ storage: memoryStorage() }),
+    SettingsModule,
   ],
   controllers: [StudentPriorityDocsController, AdminPriorityDocsController],
   providers: [PriorityDocumentsService],
